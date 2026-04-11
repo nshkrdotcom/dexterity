@@ -10,39 +10,43 @@ defmodule Dexterity.Backend.Dexter do
 
   @file_edges_sql """
   SELECT
-    r.caller_file AS source,
-    d.file         AS target,
-    COUNT(*)       AS ref_count
-  FROM "references" r
+    r.file_path AS source,
+    d.file_path AS target,
+    COUNT(*) AS ref_count
+  FROM refs r
   JOIN definitions d
-    ON r.target_module = d.module
-   AND r.target_function = d.function
-   AND r.target_arity = d.arity
-  WHERE r.caller_file != d.file
-  GROUP BY r.caller_file, d.file
+    ON r.module = d.module
+   AND (
+     (r.function != '' AND d.function = r.function) OR
+       (r.function = '' AND d.function = '')
+   )
+  WHERE r.file_path != d.file_path
+  GROUP BY r.file_path, d.file_path
   """
 
   @file_nodes_sql """
-  SELECT DISTINCT file FROM definitions
+  SELECT DISTINCT file_path AS file FROM definitions
   UNION
-  SELECT DISTINCT caller_file AS file FROM "references"
+  SELECT DISTINCT file_path AS file FROM refs
   """
 
   @exported_sql """
-  SELECT module, function, arity, file, line
+  SELECT module, function, arity, file_path, line
   FROM definitions
-  WHERE file = ?1
-  ORDER BY file ASC, line ASC
+  WHERE file_path = ?1
+    AND function != ''
+    AND kind NOT IN ('callback', 'macrocallback')
+  ORDER BY file_path ASC, line ASC
   """
 
   @find_definition_sql """
-  SELECT module, function, arity, file, line
+  SELECT module, function, arity, file_path, line
   FROM definitions
   """
 
   @find_references_sql """
-  SELECT caller_file, line
-  FROM "references" r
+  SELECT file_path, line
+  FROM refs r
   """
 
   @spec db_path(String.t()) :: String.t()
@@ -56,7 +60,8 @@ defmodule Dexterity.Backend.Dexter do
       edges =
         for [source, target, ref_count] <- result.rows,
             (source != nil and target != nil and ref_count) && ref_count > 0 do
-          {source, target, weight(ref_count)}
+          {normalize_path(repo_root, source), normalize_path(repo_root, target),
+           weight(ref_count)}
         end
 
       {:ok, edges}
@@ -73,7 +78,7 @@ defmodule Dexterity.Backend.Dexter do
          :ok <- close(conn) do
       nodes =
         Enum.map(result.rows, fn [file] ->
-          file
+          normalize_path(repo_root, file)
         end)
 
       {:ok, nodes}
@@ -85,10 +90,12 @@ defmodule Dexterity.Backend.Dexter do
 
   @impl Dexterity.Backend
   def list_exported_symbols(repo_root, file) do
+    file = resolve_repo_path(repo_root, file)
+
     with {:ok, conn} <- open_db(repo_root),
          {:ok, _query, result, _conn} <- exec_query(conn, @exported_sql, [file]),
          :ok <- close(conn) do
-      symbols = Enum.map(result.rows, &row_to_symbol/1)
+      symbols = Enum.map(result.rows, &row_to_symbol(repo_root, &1))
       {:ok, symbols}
     else
       {:error, reason} ->
@@ -100,9 +107,16 @@ defmodule Dexterity.Backend.Dexter do
   def find_definition(repo_root, module_name, function_name, arity) do
     where =
       case {function_name, arity} do
-        {nil, _} -> "WHERE module = ?1"
-        {_, nil} -> "WHERE module = ?1 AND function = ?2"
-        _ -> "WHERE module = ?1 AND function = ?2 AND arity = ?3"
+        {nil, _} ->
+          "WHERE module = ?1 AND function = '' AND kind IN ('module', 'defprotocol', 'defimpl')"
+
+        {_, nil} ->
+          "WHERE module = ?1 AND function = ?2"
+          |> append_non_module_kinds()
+
+        _ ->
+          "WHERE module = ?1 AND function = ?2 AND arity = ?3"
+          |> append_non_module_kinds()
       end
 
     params =
@@ -112,12 +126,12 @@ defmodule Dexterity.Backend.Dexter do
         {_, _} -> [module_name, function_name, arity]
       end
 
-    sql = "#{@find_definition_sql} #{where} ORDER BY file ASC, line ASC"
+    sql = "#{@find_definition_sql} #{where} ORDER BY file_path ASC, line ASC"
 
     with {:ok, conn} <- open_db(repo_root),
          {:ok, _query, result, _conn} <- exec_query(conn, sql, params),
          :ok <- close(conn) do
-      symbols = Enum.map(result.rows, &row_to_symbol/1)
+      symbols = Enum.map(result.rows, &row_to_symbol(repo_root, &1))
 
       if symbols == [] do
         {:error, :not_found}
@@ -134,26 +148,26 @@ defmodule Dexterity.Backend.Dexter do
   def find_references(repo_root, module_name, function_name, arity) do
     where =
       case {function_name, arity} do
-        {nil, _} -> "WHERE r.target_module = ?1"
-        {_, nil} -> "WHERE r.target_module = ?1 AND r.target_function = ?2"
-        _ -> "WHERE r.target_module = ?1 AND r.target_function = ?2 AND r.target_arity = ?3"
+        {nil, _} -> "WHERE r.module = ?1"
+        {_, nil} -> "WHERE r.module = ?1 AND r.function = ?2"
+        _ -> "WHERE r.module = ?1 AND r.function = ?2"
       end
 
     params =
       case {function_name, arity} do
         {nil, _} -> [module_name]
         {_, nil} -> [module_name, function_name]
-        {_, _} -> [module_name, function_name, arity]
+        {_, _} -> [module_name, function_name]
       end
 
-    sql = "#{@find_references_sql} #{where} ORDER BY caller_file ASC, line ASC"
+    sql = "#{@find_references_sql} #{where} ORDER BY file_path ASC, line ASC"
 
     with {:ok, conn} <- open_db(repo_root),
          {:ok, _query, result, _conn} <- exec_query(conn, sql, params),
          :ok <- close(conn) do
       refs =
         Enum.map(result.rows, fn [caller_file, line] ->
-          %{file: caller_file, line: line}
+          %{file: normalize_path(repo_root, caller_file), line: line}
         end)
 
       {:ok, refs}
@@ -253,13 +267,35 @@ defmodule Dexterity.Backend.Dexter do
 
   defp normalize_error(%Exqlite.Error{} = error), do: error.message
 
-  defp row_to_symbol([module_name, function_name, arity, file, line]) do
+  defp append_non_module_kinds(where_clause) do
+    where_clause <> " AND kind NOT IN ('module', 'defprotocol', 'defimpl')"
+  end
+
+  defp row_to_symbol(repo_root, [module_name, function_name, arity, file, line]) do
     %{
       module: module_name,
       function: function_name,
       arity: arity,
-      file: file,
+      file: normalize_path(repo_root, file),
       line: line
     }
+  end
+
+  defp resolve_repo_path(repo_root, path) when is_binary(path) do
+    if Path.type(path) == :absolute do
+      path
+    else
+      Path.join(repo_root, path)
+    end
+  end
+
+  defp normalize_path(repo_root, path) when is_binary(path) do
+    expanded_root = Path.expand(repo_root)
+    expanded_path = Path.expand(path)
+
+    case String.trim_leading(expanded_path, expanded_root <> "/") do
+      ^expanded_path -> path
+      relative -> relative
+    end
   end
 end

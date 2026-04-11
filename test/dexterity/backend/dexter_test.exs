@@ -12,6 +12,8 @@ defmodule Dexterity.Backend.DexterTest do
       )
 
     db_path = Path.join(root, ".dexter.db")
+    module_path = Path.join(root, "lib/my_module.ex")
+    caller_path = Path.join(root, "lib/caller.ex")
 
     File.mkdir_p!(root)
     {:ok, conn} = Basic.open(db_path)
@@ -19,31 +21,58 @@ defmodule Dexterity.Backend.DexterTest do
     {:ok, _query, _result, _} =
       Basic.exec(
         conn,
-        "CREATE TABLE definitions (module TEXT, function TEXT, arity INTEGER, file TEXT, line INTEGER)"
+        """
+        CREATE TABLE definitions (
+          module TEXT,
+          function TEXT,
+          arity INTEGER,
+          kind TEXT,
+          line INTEGER,
+          file_path TEXT
+        )
+        """
       )
 
     {:ok, _query, _result, _} =
       Basic.exec(
         conn,
-        "CREATE TABLE \"references\" (caller_file TEXT, target_module TEXT, target_function TEXT, target_arity INTEGER, line INTEGER)"
+        """
+        CREATE TABLE refs (
+          module TEXT,
+          function TEXT,
+          line INTEGER,
+          file_path TEXT,
+          kind TEXT
+        )
+        """
       )
 
     {:ok, _query, _result, _} =
       Basic.exec(
         conn,
-        "INSERT INTO definitions VALUES ('MyModule', 'my_func', 1, 'lib/my_module.ex', 10)"
+        "INSERT INTO definitions VALUES ('MyModule', '', 0, 'module', 1, ?1)",
+        [module_path]
       )
 
     {:ok, _query, _result, _} =
       Basic.exec(
         conn,
-        "INSERT INTO \"references\" VALUES ('lib/caller.ex', 'MyModule', 'my_func', 1, 12)"
+        "INSERT INTO definitions VALUES ('MyModule', 'my_func', 1, 'function', 10, ?1)",
+        [module_path]
       )
 
     {:ok, _query, _result, _} =
       Basic.exec(
         conn,
-        "INSERT INTO \"references\" VALUES ('lib/caller.ex', 'MyModule', 'my_func', 1, 13)"
+        "INSERT INTO refs VALUES ('MyModule', 'my_func', 12, ?1, 'call')",
+        [caller_path]
+      )
+
+    {:ok, _query, _result, _} =
+      Basic.exec(
+        conn,
+        "INSERT INTO refs VALUES ('MyModule', 'my_func', 13, ?1, 'call')",
+        [caller_path]
       )
 
     on_exit(fn ->
@@ -79,6 +108,7 @@ defmodule Dexterity.Backend.DexterTest do
 
     assert {:ok, symbols} = Dexter.find_definition(repo_root, "MyModule", nil, nil)
     assert length(symbols) == 1
+    assert hd(symbols).function == ""
   end
 
   test "find_references resolves callers for exported symbol", %{repo_root: repo_root} do
@@ -92,6 +122,17 @@ defmodule Dexterity.Backend.DexterTest do
   end
 
   test "healthy returns backend_missing_binary when dexter executable is unavailable" do
+    previous = Application.get_env(:dexterity, :dexter_bin)
+    Application.put_env(:dexterity, :dexter_bin, "definitely-not-a-real-dexter-binary")
+
+    on_exit(fn ->
+      if is_nil(previous) do
+        Application.delete_env(:dexterity, :dexter_bin)
+      else
+        Application.put_env(:dexterity, :dexter_bin, previous)
+      end
+    end)
+
     assert {:error, :backend_missing_binary} = Dexter.healthy?(System.tmp_dir!())
   end
 end

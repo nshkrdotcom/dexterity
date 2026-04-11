@@ -4,25 +4,24 @@ Dexterity ships with runnable examples intended to shorten the time from install
 
 ## Included Example
 
-### `comprehensive_mock_backend.exs`
+### `comprehensive_real_backend.exs`
 
 Run it with:
 
 ```bash
-mix run examples/comprehensive_mock_backend.exs
+mix run examples/comprehensive_real_backend.exs
 ```
 
-This example is intentionally self-contained. It does not require a real `dexter` binary or a `.dexter.db` file. Instead, it:
+This example is intentionally real. It requires a working `dexter` binary on `PATH` or a `DEXTER_BIN` environment variable. It:
 
 - creates a temporary Elixir-shaped repo on disk
-- starts a temporary SQLite metadata store
-- uses a stub backend that implements `Dexterity.Backend`
-- injects cochange data
-- starts `Dexterity.GraphServer`
-- starts `Dexterity.SummaryWorker`
+- initializes a real git repository with multiple commits
+- runs `dexter init` to build a real `.dexter.db`
+- starts Dexterity with `Dexterity.Backend.Dexter`
+- lets the real cochange worker ingest git history
 - exercises the main public APIs and prints the results
 
-Use it to learn the API shape before wiring Dexterity to a real indexed repository.
+Use it to validate your local Dexter + Dexterity setup against a disposable repo before pointing Dexterity at a larger project.
 
 ## Real Backend Checklist
 

@@ -12,6 +12,16 @@ def deps do
 end
 ```
 
+## Real Example
+
+If you want to validate the full real backend flow before wiring Dexterity into a larger codebase, run:
+
+```bash
+mix run examples/comprehensive_real_backend.exs
+```
+
+That example uses a real `dexter` binary, a real temporary `.dexter.db`, and real git history.
+
 ## Minimum local runtime
 
 1. Ensure `dexter` CLI is installed and accessible on `PATH`, or set `:dexter_bin`.

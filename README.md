@@ -34,7 +34,7 @@ Dexterity itself is pure Elixir, but the default production backend depends on e
 3. `git` should be available if you want cochange analysis to be useful.
 4. Native build tooling required by `exqlite` must be available on the machine building dependencies.
 
-The included example script does not require a real Dexter installation; it uses a stub backend so you can see the full API shape immediately.
+The included example is fully real: it creates a temporary repo, builds a real Dexter index, ingests real git history for cochanges, and runs Dexterity against the resulting `.dexter.db`.
 
 ## Installation
 
@@ -157,19 +157,20 @@ Supported tools include:
 Start with the runnable example:
 
 ```bash
-mix run examples/comprehensive_mock_backend.exs
+mix run examples/comprehensive_real_backend.exs
 ```
 
 That example shows:
 
-- graph construction
+- real Dexter indexing
+- real git-driven cochange ingestion
 - ranked repo map generation
 - semantic symbol lookup
 - definition and reference queries
 - dependency lookup
 - blast radius
 - cochange enrichment
-- summary caching
+- real file reindexing
 
 See [examples/README.md](examples/README.md) for details.
 
