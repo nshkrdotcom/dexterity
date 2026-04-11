@@ -39,6 +39,7 @@ defmodule Dexterity.Query do
     try do
       adjacency = GraphServer.get_adjacency(server)
       cochanges = Map.get(adjacency, file, %{}) |> Map.to_list()
+
       results =
         cochanges
         |> Enum.sort_by(fn {_neighbor, weight} -> -weight end)
@@ -70,8 +71,7 @@ defmodule Dexterity.Query do
     visited = %{source => 0}
 
     {visited, _frontier} =
-      Enum.reduce_while(1..max_depth, {visited, initial_frontier}, fn _depth,
-                                                                     {seen, frontier} ->
+      Enum.reduce_while(1..max_depth, {visited, initial_frontier}, fn _depth, {seen, frontier} ->
         {next_level, next_frontier} =
           Enum.reduce(frontier, {MapSet.new(), []}, fn {node, depth}, {next_nodes, next_acc} ->
             Map.get(adjacency, node, %{})

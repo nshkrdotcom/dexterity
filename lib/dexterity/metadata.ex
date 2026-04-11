@@ -12,7 +12,10 @@ defmodule Dexterity.Metadata do
           clone_tokens: [String.t()]
         }
 
-  @spec build(String.t(), [String.t()]) :: %{files: %{String.t() => file_metadata()}, edges: [tuple()]}
+  @spec build(String.t(), [String.t()]) :: %{
+          files: %{String.t() => file_metadata()},
+          edges: [tuple()]
+        }
   def build(repo_root, files) do
     files =
       files
@@ -68,7 +71,7 @@ defmodule Dexterity.Metadata do
     injected_by =
       Enum.reduce(use_edges, %{}, fn {_source_file, target_file, _weight, reason}, acc ->
         Map.update(acc, target_file, [reason], fn reasons ->
-          ([reason | reasons])
+          [reason | reasons]
           |> Enum.uniq()
           |> Enum.sort()
         end)
@@ -145,7 +148,7 @@ defmodule Dexterity.Metadata do
     Enum.reduce(file_metadata, %{}, fn {file, metadata}, acc ->
       Enum.reduce(Map.get(metadata, key, []), acc, fn module_name, group_acc ->
         Map.update(group_acc, module_name, [file], fn files ->
-          ([file | files])
+          [file | files]
           |> Enum.uniq()
           |> Enum.sort()
         end)
@@ -286,14 +289,17 @@ defmodule Dexterity.Metadata do
   end
 
   defp alias_to_string({:__aliases__, _, parts}), do: Enum.join(parts, ".")
-  defp alias_to_string(atom) when is_atom(atom), do: atom |> Atom.to_string() |> String.trim_leading("Elixir.")
+
+  defp alias_to_string(atom) when is_atom(atom),
+    do: atom |> Atom.to_string() |> String.trim_leading("Elixir.")
+
   defp alias_to_string(_), do: nil
 
   defp update_list(metadata, _key, nil), do: metadata
 
   defp update_list(metadata, key, value) do
     Map.update!(metadata, key, fn values ->
-      ([value | values])
+      [value | values]
       |> Enum.uniq()
       |> Enum.sort()
     end)

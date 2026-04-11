@@ -43,7 +43,8 @@ defmodule MixTasksTest do
     @behaviour Dexterity.Backend
 
     @impl true
-    def list_file_edges(_repo_root), do: {:ok, [{"lib/a.ex", "lib/b.ex", 1.0}, {"lib/b.ex", "lib/c.ex", 0.5}]}
+    def list_file_edges(_repo_root),
+      do: {:ok, [{"lib/a.ex", "lib/b.ex", 1.0}, {"lib/b.ex", "lib/c.ex", 0.5}]}
 
     @impl true
     def list_file_nodes(_repo_root), do: {:ok, ["lib/a.ex", "lib/b.ex", "lib/c.ex"]}
@@ -59,7 +60,8 @@ defmodule MixTasksTest do
     def find_definition(_repo_root, _module, _function, _arity), do: {:error, :not_found}
 
     @impl true
-    def find_references(_repo_root, "MyModule", nil, nil), do: {:ok, [%{file: "lib/caller.ex", line: 4}]}
+    def find_references(_repo_root, "MyModule", nil, nil),
+      do: {:ok, [%{file: "lib/caller.ex", line: 4}]}
 
     @impl true
     def find_references(_repo_root, _module, _function, _arity), do: {:ok, []}
@@ -106,7 +108,12 @@ defmodule MixTasksTest do
   end
 
   test "dexterity.map writes result to output file" do
-    tmp_file = Path.join(System.tmp_dir!(), "dexterity-map-task-#{:erlang.unique_integer([:positive])}.txt")
+    tmp_file =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-map-task-#{:erlang.unique_integer([:positive])}.txt"
+      )
+
     backend = TaskBackend
 
     output =

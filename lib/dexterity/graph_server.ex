@@ -103,6 +103,7 @@ defmodule Dexterity.GraphServer do
   defp init_state(opts) do
     repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
     backend = Keyword.get(opts, :backend, Config.fetch(:backend))
+
     store_conn =
       case Keyword.fetch(opts, :store_conn) do
         {:ok, value} -> value
@@ -160,7 +161,15 @@ defmodule Dexterity.GraphServer do
     baseline = PageRank.compute(merged, [], sorted_all)
 
     cache_pagerank(state.store_conn, baseline)
-    %{state | graph: merged, metadata: metadata.files, all_files: sorted_all, baseline: baseline, stale: false}
+
+    %{
+      state
+      | graph: merged,
+        metadata: metadata.files,
+        all_files: sorted_all,
+        baseline: baseline,
+        stale: false
+    }
   end
 
   defp fetch_file_edges(state) do

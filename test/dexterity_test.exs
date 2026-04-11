@@ -78,14 +78,25 @@ defmodule DexterityTest do
   end
 
   test "get_symbols returns not_indexed when no exported symbols exist" do
-    assert {:error, :not_indexed} = Dexterity.get_symbols("lib/does_not_exist.ex", backend: StubBackend)
+    assert {:error, :not_indexed} =
+             Dexterity.get_symbols("lib/does_not_exist.ex", backend: StubBackend)
   end
 
   test "get_repo_map enqueues and invalidates summaries based on mtime and signature" do
-    repo_root = Path.join(System.tmp_dir!(), "dexterity-summary-#{:erlang.unique_integer([:positive])}")
-    store_path = Path.join(System.tmp_dir!(), "dexterity-summary-store-#{:erlang.unique_integer([:positive])}.db")
+    repo_root =
+      Path.join(System.tmp_dir!(), "dexterity-summary-#{:erlang.unique_integer([:positive])}")
+
+    store_path =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-summary-store-#{:erlang.unique_integer([:positive])}.db"
+      )
+
     graph_server = Module.concat(__MODULE__, :"GraphServer#{:erlang.unique_integer([:positive])}")
-    summary_server = Module.concat(__MODULE__, :"SummaryWorker#{:erlang.unique_integer([:positive])}")
+
+    summary_server =
+      Module.concat(__MODULE__, :"SummaryWorker#{:erlang.unique_integer([:positive])}")
+
     file = "lib/my_module.ex"
     module_name = "MyModule"
 

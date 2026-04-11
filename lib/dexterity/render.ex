@@ -72,12 +72,16 @@ defmodule Dexterity.Render do
         Enum.map(symbols, fn sym -> "- `#{sym.function}/#{sym.arity}` in `#{sym.module}`" end)
       end
 
-    content = Enum.join([base, clone_line(clone_of), metadata_lines, summary_text, symbol_lines], "\n")
+    content =
+      Enum.join([base, clone_line(clone_of), metadata_lines, summary_text, symbol_lines], "\n")
+
     "\n#{content}\n"
   end
 
   defp append_annotation(lines, _label, []), do: lines
-  defp append_annotation(lines, label, values), do: lines ++ ["- #{label}: #{Enum.join(values, ", ")}"]
+
+  defp append_annotation(lines, label, values),
+    do: lines ++ ["- #{label}: #{Enum.join(values, ", ")}"]
 
   defp clone_line(nil), do: []
   defp clone_line(clone_of) when is_binary(clone_of), do: ["- [CLONE of #{clone_of}]"]

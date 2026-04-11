@@ -23,6 +23,7 @@ defmodule Dexterity.SummaryWorker do
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     name = Keyword.get(opts, :name, __MODULE__)
+
     db_conn =
       case Keyword.fetch(opts, :db_conn) do
         {:ok, value} -> value

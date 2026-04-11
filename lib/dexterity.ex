@@ -154,8 +154,8 @@ defmodule Dexterity do
 
     files = map_size(graph)
 
-      case backend.index_status(repo_root) do
-        {:ok, index_status} when index_status in [:ready, :stale, :missing, :error] ->
+    case backend.index_status(repo_root) do
+      {:ok, index_status} when index_status in [:ready, :stale, :missing, :error] ->
         case backend.healthy?(repo_root) do
           {:ok, backend_healthy} when is_boolean(backend_healthy) ->
             {:ok,
@@ -232,7 +232,8 @@ defmodule Dexterity do
   end
 
   defp context_files(opts) do
-    ([Keyword.get(opts, :active_file)] ++ Keyword.get(opts, :mentioned_files, []) ++
+    ([Keyword.get(opts, :active_file)] ++
+       Keyword.get(opts, :mentioned_files, []) ++
        Keyword.get(opts, :edited_files, []))
     |> Enum.filter(&is_binary/1)
     |> Enum.uniq()
@@ -278,7 +279,13 @@ defmodule Dexterity do
 
               :stale ->
                 if summary_enabled do
-                  SummaryWorker.summarize(summary_server, file, module_name, current_mtime, context)
+                  SummaryWorker.summarize(
+                    summary_server,
+                    file,
+                    module_name,
+                    current_mtime,
+                    context
+                  )
                 end
 
                 {file, nil}

@@ -72,7 +72,13 @@ defmodule Dexterity.MCP do
   end
 
   def handle_request(request, _context) do
-    {:error, error_payload(Map.get(request, :id) || Map.get(request, "id"), @invalid_request, "invalid request", "jsonrpc 2.0 required")}
+    {:error,
+     error_payload(
+       Map.get(request, :id) || Map.get(request, "id"),
+       @invalid_request,
+       "invalid request",
+       "jsonrpc 2.0 required"
+     )}
   end
 
   @spec process_line(String.t(), runtime_context()) :: :ok
@@ -133,7 +139,7 @@ defmodule Dexterity.MCP do
        "serverName" => "dexterity",
        "clientInfo" => client_info,
        "capabilities" => %{"tools" => true},
-       "version" => (Application.spec(:dexterity, :vsn) || "0.1.0")
+       "version" => Application.spec(:dexterity, :vsn) || "0.1.0"
      }}
   end
 
@@ -163,16 +169,17 @@ defmodule Dexterity.MCP do
     {:error, @method_not_found, "method not found", "unsupported method #{method}"}
   end
 
-  defp dispatch_tool("query_references", params, context), do:
-    begin_query_tool(params, context, &Query.find_references/4)
+  defp dispatch_tool("query_references", params, context),
+    do: begin_query_tool(params, context, &Query.find_references/4)
 
-  defp dispatch_tool("query_definition", params, context), do:
-    begin_query_tool(params, context, &Query.find_definition/4)
+  defp dispatch_tool("query_definition", params, context),
+    do: begin_query_tool(params, context, &Query.find_definition/4)
 
   defp dispatch_tool("query_blast", params, context) do
     file = get_required(params, "file")
     query_opts = query_opts(params, context)
     depth = parse_integer(get_optional(params, "depth"), fallback: 2)
+
     Query.blast_radius(file, Keyword.put(query_opts, :depth, depth))
     |> call_result()
   end
@@ -181,12 +188,14 @@ defmodule Dexterity.MCP do
     file = get_required(params, "file")
     limit = parse_integer(get_optional(params, "limit"), fallback: 10)
     query_opts = query_opts(params, context)
+
     Query.cochanges(file, limit, query_opts)
     |> call_result()
   end
 
   defp dispatch_tool("get_ranked_files", params, context) do
     opts = map_query_opts(params, context)
+
     Elixir.Dexterity.get_ranked_files(opts)
     |> call_result()
   end
@@ -195,6 +204,7 @@ defmodule Dexterity.MCP do
     opts = map_query_opts(params, context)
     token_budget = parse_integer(get_optional(params, "token_budget"), fallback: :auto)
     opts = Keyword.put(opts, :token_budget, token_budget)
+
     Elixir.Dexterity.get_repo_map(opts)
     |> call_result()
   end
@@ -202,6 +212,7 @@ defmodule Dexterity.MCP do
   defp dispatch_tool("get_symbols", params, context) do
     file = get_required(params, "file")
     opts = tool_opts(params, context)
+
     Elixir.Dexterity.get_symbols(file, opts)
     |> call_result()
   end
@@ -209,6 +220,7 @@ defmodule Dexterity.MCP do
   defp dispatch_tool("get_module_deps", params, context) do
     file = get_required(params, "file")
     opts = tool_opts(params, context)
+
     Elixir.Dexterity.get_module_deps(file, opts)
     |> call_result()
   end
@@ -226,12 +238,15 @@ defmodule Dexterity.MCP do
     function_name = get_optional(params, "function")
     arity = parse_arity(get_optional(params, "arity"))
     query_opts = query_opts(params, context)
+
     query_fun.(module_name, function_name, arity, query_opts)
     |> call_result()
   end
 
   defp call_result({:ok, result}), do: {:ok, %{"result" => result}}
-  defp call_result({:error, reason}), do: {:error, @invalid_params, "request failed", inspect(reason)}
+
+  defp call_result({:error, reason}),
+    do: {:error, @invalid_params, "request failed", inspect(reason)}
 
   defp tool_opts(params, context) do
     repo_root = get_optional(params, "repo_root") || context.repo_root
@@ -242,15 +257,25 @@ defmodule Dexterity.MCP do
 
   defp map_query_opts(params, context) do
     active_file = get_optional(params, "active_file") || get_optional(params, "activeFile")
-    mentioned_files = parse_file_list(get_optional(params, "mentioned_files") || get_optional(params, "mentionedFiles"))
-    edited_files = parse_file_list(get_optional(params, "edited_files") || get_optional(params, "editedFiles"))
+
+    mentioned_files =
+      parse_file_list(
+        get_optional(params, "mentioned_files") || get_optional(params, "mentionedFiles")
+      )
+
+    edited_files =
+      parse_file_list(get_optional(params, "edited_files") || get_optional(params, "editedFiles"))
 
     repo_root = get_optional(params, "repo_root") || context.repo_root
     backend = safe_module(get_optional(params, "backend"), context.backend)
     limit = parse_integer(get_optional(params, "limit"), fallback: 25)
     token_budget = get_optional(params, "token_budget")
     min_rank = parse_float(get_optional(params, "min_rank"), fallback: 0.0)
-    include_clones = parse_boolean(get_optional(params, "include_clones"), fallback: Config.fetch(:include_clones))
+
+    include_clones =
+      parse_boolean(get_optional(params, "include_clones"),
+        fallback: Config.fetch(:include_clones)
+      )
 
     opts = [
       backend: backend,
@@ -356,7 +381,11 @@ defmodule Dexterity.MCP do
   defp response(id, result), do: %{"jsonrpc" => @jsonrpc, "id" => id, "result" => result}
 
   defp error_payload(id, code, message, data) do
-    %{"jsonrpc" => @jsonrpc, "id" => id, "error" => %{"code" => code, "message" => message, "data" => data}}
+    %{
+      "jsonrpc" => @jsonrpc,
+      "id" => id,
+      "error" => %{"code" => code, "message" => message, "data" => data}
+    }
   end
 
   defp error_response(id, code, message, data) do
@@ -379,5 +408,4 @@ defmodule Dexterity.MCP do
 
     :ok
   end
-
 end

@@ -17,7 +17,10 @@ defmodule Dexterity.PageRank do
     else
       damping = Keyword.get(opts, :damping, Config.fetch(:pagerank_damping))
       iterations = Keyword.get(opts, :iterations, Config.fetch(:pagerank_iterations))
-      uniform_baseline = Keyword.get(opts, :uniform_baseline, Config.fetch(:pagerank_uniform_baseline))
+
+      uniform_baseline =
+        Keyword.get(opts, :uniform_baseline, Config.fetch(:pagerank_uniform_baseline))
+
       context_boost = Keyword.get(opts, :context_boost, Config.fetch(:pagerank_context_boost))
 
       context_normalized = Enum.uniq(context_files)
@@ -29,7 +32,8 @@ defmodule Dexterity.PageRank do
         context_vector(all_files, context_normalized, n, uniform_baseline, context_boost)
         |> normalize()
 
-      out_sums = Map.new(all_files, fn file -> {file, outgoing_sum(Map.get(graph, file, %{}))} end)
+      out_sums =
+        Map.new(all_files, fn file -> {file, outgoing_sum(Map.get(graph, file, %{}))} end)
 
       Enum.reduce(1..iterations, base_scores, fn _i, ranks ->
         dangling = dangling_mass(ranks, out_sums, graph)
@@ -66,14 +70,15 @@ defmodule Dexterity.PageRank do
     d_dangling = damping * dangling
 
     Enum.reduce(all_files, %{}, fn file, acc ->
-      score = damping * propagated[file] + teleport_mass * teleport[file] + d_dangling * teleport[file]
+      score =
+        damping * propagated[file] + teleport_mass * teleport[file] + d_dangling * teleport[file]
+
       Map.put(acc, file, score)
     end)
   end
 
   defp propagate(ranks, graph, out_sums) do
-    Enum.reduce(ranks, Map.new(Map.keys(ranks), fn k -> {k, 0.0} end), fn {from, rank},
-                                                                                  acc ->
+    Enum.reduce(ranks, Map.new(Map.keys(ranks), fn k -> {k, 0.0} end), fn {from, rank}, acc ->
       edges = Map.get(graph, from, %{})
       denominator = Map.get(out_sums, from, 0.0)
 

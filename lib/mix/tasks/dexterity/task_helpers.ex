@@ -31,7 +31,7 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
     :ok
   end
 
-  @spec configure_temporary(keyword(), (() -> result)) :: result when result: var
+  @spec configure_temporary(keyword(), (-> result)) :: result when result: var
   def configure_temporary(extra_config, fun) do
     previous =
       extra_config

@@ -53,9 +53,11 @@ defmodule Dexterity.Store do
   @doc """
   Lists co-change edges.
   """
-  @spec list_cochanges(db_conn()) :: {:ok, [{String.t(), String.t(), integer(), float()}]} | {:error, term()}
+  @spec list_cochanges(db_conn()) ::
+          {:ok, [{String.t(), String.t(), integer(), float()}]} | {:error, term()}
   def list_cochanges(conn) do
-    with {:ok, result} <- query_rows(conn, "SELECT file_a, file_b, frequency, weight FROM cochanges") do
+    with {:ok, result} <-
+           query_rows(conn, "SELECT file_a, file_b, frequency, weight FROM cochanges") do
       {:ok,
        Enum.map(result, fn [a, b, frequency, weight] ->
          {a, b, frequency, weight}
@@ -66,7 +68,15 @@ defmodule Dexterity.Store do
   @doc """
   Caches semantic summary rows for modules.
   """
-  @spec upsert_summary(db_conn(), String.t(), String.t(), String.t(), integer(), binary(), integer()) ::
+  @spec upsert_summary(
+          db_conn(),
+          String.t(),
+          String.t(),
+          String.t(),
+          integer(),
+          binary(),
+          integer()
+        ) ::
           :ok | {:error, term()}
   def upsert_summary(conn, file, module_name, summary, file_mtime, signature, now) do
     sql = """
@@ -165,7 +175,11 @@ defmodule Dexterity.Store do
   """
   @spec set_meta(db_conn(), String.t(), String.t()) :: :ok | {:error, term()}
   def set_meta(conn, key, value) do
-    exec!(conn, "INSERT INTO index_meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [key, value])
+    exec!(
+      conn,
+      "INSERT INTO index_meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      [key, value]
+    )
   end
 
   @doc """
@@ -207,7 +221,7 @@ defmodule Dexterity.Store do
 
         {:error, _reason} ->
           {:halt, acc}
-        end
+      end
     end)
   end
 
@@ -272,7 +286,8 @@ defmodule Dexterity.Store do
           set_schema_version(conn, @schema_version)
         end
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -301,7 +316,11 @@ defmodule Dexterity.Store do
 
   defp upsert_many(conn, scores, computed_at) do
     Enum.reduce_while(scores, {:ok, conn}, fn {file, score}, {:ok, _conn} ->
-      case exec!(conn, "INSERT INTO pagerank_cache (file, score, computed_at) VALUES (?1, ?2, ?3) ON CONFLICT(file) DO UPDATE SET score = excluded.score, computed_at = excluded.computed_at", [file, score, computed_at]) do
+      case exec!(
+             conn,
+             "INSERT INTO pagerank_cache (file, score, computed_at) VALUES (?1, ?2, ?3) ON CONFLICT(file) DO UPDATE SET score = excluded.score, computed_at = excluded.computed_at",
+             [file, score, computed_at]
+           ) do
         :ok -> {:cont, {:ok, conn}}
         error -> {:halt, error}
       end

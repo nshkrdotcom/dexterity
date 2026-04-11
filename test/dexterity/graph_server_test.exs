@@ -7,7 +7,8 @@ defmodule Dexterity.GraphServerTest do
     @behaviour Dexterity.Backend
 
     @impl true
-    def list_file_edges(_repo_root), do: {:ok, [{"lib/a.ex", "lib/b.ex", 1.2}, {"lib/b.ex", "lib/c.ex", 0.8}]}
+    def list_file_edges(_repo_root),
+      do: {:ok, [{"lib/a.ex", "lib/b.ex", 1.2}, {"lib/b.ex", "lib/c.ex", 0.8}]}
 
     @impl true
     def list_file_nodes(_repo_root), do: {:ok, ["lib/a.ex", "lib/b.ex", "lib/c.ex"]}
@@ -76,7 +77,13 @@ defmodule Dexterity.GraphServerTest do
 
   setup do
     name = Module.concat(__MODULE__, :"GraphServer#{:erlang.unique_integer([:positive])}")
-    repo_root = Path.join(System.tmp_dir!(), "dexterity-graph-server-test-#{:erlang.unique_integer([:positive])}")
+
+    repo_root =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-graph-server-test-#{:erlang.unique_integer([:positive])}"
+      )
+
     File.mkdir_p!(repo_root)
 
     {:ok, pid} =
@@ -100,6 +107,7 @@ defmodule Dexterity.GraphServerTest do
   test "builds adjacency and ranking from backend edges", %{server: server} do
     assert {:ok, ranks} = GraphServer.get_repo_map(server, [], limit: 10)
     assert length(ranks) == 3
+
     assert MapSet.new(Enum.map(ranks, fn {file, _score} -> file end)) ==
              MapSet.new(["lib/a.ex", "lib/b.ex", "lib/c.ex"])
 
@@ -118,7 +126,12 @@ defmodule Dexterity.GraphServerTest do
 
   test "adds use, behaviour, and sibling implementation edges from source metadata" do
     name = Module.concat(__MODULE__, :"MetadataGraph#{:erlang.unique_integer([:positive])}")
-    repo_root = Path.join(System.tmp_dir!(), "dexterity-metadata-graph-#{:erlang.unique_integer([:positive])}")
+
+    repo_root =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-metadata-graph-#{:erlang.unique_integer([:positive])}"
+      )
 
     File.mkdir_p!(Path.join(repo_root, "lib/support"))
     File.mkdir_p!(Path.join(repo_root, "lib/notifications"))

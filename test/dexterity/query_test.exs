@@ -68,7 +68,9 @@ defmodule Dexterity.QueryTest do
     @behaviour Dexterity.Backend
 
     @impl true
-    def list_file_edges(_repo_root), do: {:ok, [{"lib/a.ex", "lib/b.ex", 1.0}, {"lib/b.ex", "lib/c.ex", 1.0}]}
+    def list_file_edges(_repo_root),
+      do: {:ok, [{"lib/a.ex", "lib/b.ex", 1.0}, {"lib/b.ex", "lib/c.ex", 1.0}]}
+
     @impl true
     def list_file_nodes(_repo_root), do: {:ok, ["lib/a.ex", "lib/b.ex", "lib/c.ex"]}
     @impl true
@@ -91,7 +93,15 @@ defmodule Dexterity.QueryTest do
     assert {:ok, symbols} =
              Query.find_definition("MyModule", "my_func", 1, backend: QueryBackend)
 
-    assert [%{module: "MyModule", function: "my_func", arity: 1, file: "lib/my_module.ex", line: 10}] =
+    assert [
+             %{
+               module: "MyModule",
+               function: "my_func",
+               arity: 1,
+               file: "lib/my_module.ex",
+               line: 10
+             }
+           ] =
              symbols
   end
 
@@ -101,7 +111,9 @@ defmodule Dexterity.QueryTest do
   end
 
   test "blast_radius traverses graph by file depth" do
-    root = Path.join(System.tmp_dir!(), "dexterity-query-graph-#{:erlang.unique_integer([:positive])}")
+    root =
+      Path.join(System.tmp_dir!(), "dexterity-query-graph-#{:erlang.unique_integer([:positive])}")
+
     File.mkdir_p!(root)
 
     name =
@@ -119,7 +131,10 @@ defmodule Dexterity.QueryTest do
       )
 
     Process.sleep(20)
-    assert {:ok, results} = Query.blast_radius("lib/a.ex", graph_server: name, backend: BlastBackend, depth: 2)
+
+    assert {:ok, results} =
+             Query.blast_radius("lib/a.ex", graph_server: name, backend: BlastBackend, depth: 2)
+
     assert %{source: "lib/a.ex", depth: 0} in results
     assert %{source: "lib/b.ex", depth: 1} in results
     assert %{source: "lib/c.ex", depth: 2} in results
@@ -129,7 +144,12 @@ defmodule Dexterity.QueryTest do
   end
 
   test "cochanges returns top-N neighbor weights for file" do
-    root = Path.join(System.tmp_dir!(), "dexterity-query-cochanges-#{:erlang.unique_integer([:positive])}")
+    root =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-query-cochanges-#{:erlang.unique_integer([:positive])}"
+      )
+
     File.mkdir_p!(root)
 
     name =

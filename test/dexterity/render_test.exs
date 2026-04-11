@@ -40,12 +40,19 @@ defmodule Dexterity.RenderTest do
     ]
 
     symbols = %{
-      "lib/notifications/email.ex" => [%{module: "MyApp.Notifications.Email", function: "deliver", arity: 1}],
-      "lib/notifications/email_copy.ex" => [%{module: "MyApp.Notifications.EmailCopy", function: "deliver", arity: 1}]
+      "lib/notifications/email.ex" => [
+        %{module: "MyApp.Notifications.Email", function: "deliver", arity: 1}
+      ],
+      "lib/notifications/email_copy.ex" => [
+        %{module: "MyApp.Notifications.EmailCopy", function: "deliver", arity: 1}
+      ]
     }
 
     clones = %{
-      "lib/notifications/email_copy.ex" => %{source: "lib/notifications/email.ex", similarity: 0.91}
+      "lib/notifications/email_copy.ex" => %{
+        source: "lib/notifications/email.ex",
+        similarity: 0.91
+      }
     }
 
     metadata = %{

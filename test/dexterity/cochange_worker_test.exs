@@ -7,7 +7,12 @@ defmodule Dexterity.CochangeWorkerTest do
   @db_path_template "test_cochange_worker_"
 
   setup do
-    path = Path.join(System.tmp_dir!(), "#{@db_path_template}#{:erlang.unique_integer([:positive])}.db")
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "#{@db_path_template}#{:erlang.unique_integer([:positive])}.db"
+      )
+
     File.rm(path)
     {:ok, conn} = Store.open(path)
 
@@ -24,6 +29,7 @@ defmodule Dexterity.CochangeWorkerTest do
       lib/a.ex
       lib/b.ex
       """
+
       {output, 0}
     end
 
@@ -39,7 +45,17 @@ defmodule Dexterity.CochangeWorkerTest do
     name = Module.concat(__MODULE__, :"CochangeWorker#{:erlang.unique_integer([:positive])}")
     root = System.tmp_dir!()
 
-    {:ok, pid} = start_supervised({CochangeWorker, repo_root: root, db_conn: conn, cmd_fn: cmd, enabled: true, interval_ms: 10_000, name: name})
+    {:ok, pid} =
+      start_supervised(
+        {CochangeWorker,
+         repo_root: root,
+         db_conn: conn,
+         cmd_fn: cmd,
+         enabled: true,
+         interval_ms: 10_000,
+         name: name}
+      )
+
     send(pid, :analyze)
 
     Process.sleep(30)

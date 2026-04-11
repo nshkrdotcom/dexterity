@@ -19,19 +19,24 @@ defmodule Mix.Tasks.Dexterity.Query do
 
   @impl Mix.Task
   def run(argv) do
-    parsed = OptionParser.parse!(
-      argv,
-      strict: [repo_root: :string, backend: :string, depth: :integer, limit: :integer]
-    )
+    parsed =
+      OptionParser.parse!(
+        argv,
+        strict: [repo_root: :string, backend: :string, depth: :integer, limit: :integer]
+      )
 
     opts = elem(parsed, 0)
     args = elem(parsed, 1)
 
     if args == [] do
-      Helpers.exit_with_error("missing subcommand", "expected references|definition|blast|cochanges")
+      Helpers.exit_with_error(
+        "missing subcommand",
+        "expected references|definition|blast|cochanges"
+      )
     end
 
     [command | params] = args
+
     previous = [
       repo_root: Application.get_env(:dexterity, :repo_root),
       backend: Application.get_env(:dexterity, :backend)
@@ -108,7 +113,8 @@ defmodule Mix.Tasks.Dexterity.Query do
     end
   end
 
-  defp run_blast(_params, _opts), do: Helpers.exit_with_error("blast query accepts exactly one file argument", nil)
+  defp run_blast(_params, _opts),
+    do: Helpers.exit_with_error("blast query accepts exactly one file argument", nil)
 
   defp run_cochanges([], _opts), do: Helpers.exit_with_error("cochanges query requires file", nil)
 

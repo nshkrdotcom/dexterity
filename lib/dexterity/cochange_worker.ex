@@ -14,6 +14,7 @@ defmodule Dexterity.CochangeWorker do
   def start_link(opts) do
     name = Keyword.get(opts, :name, __MODULE__)
     repo_root = Keyword.fetch!(opts, :repo_root)
+
     db_conn =
       case Keyword.fetch(opts, :db_conn) do
         {:ok, value} -> value
@@ -104,6 +105,7 @@ defmodule Dexterity.CochangeWorker do
   end
 
   defp ordered_pairs(files) when length(files) < 2, do: []
+
   defp ordered_pairs(files) do
     for a <- files, b <- files, a < b do
       {a, b}

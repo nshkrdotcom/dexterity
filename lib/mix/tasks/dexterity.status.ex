@@ -15,7 +15,11 @@ defmodule Mix.Tasks.Dexterity.Status do
 
   @impl Mix.Task
   def run(argv) do
-    parsed = OptionParser.parse!(argv, strict: [repo_root: :string, backend: :string], aliases: [r: :repo_root, b: :backend])
+    parsed =
+      OptionParser.parse!(argv,
+        strict: [repo_root: :string, backend: :string],
+        aliases: [r: :repo_root, b: :backend]
+      )
 
     opts = elem(parsed, 0)
     args = elem(parsed, 1)

@@ -19,7 +19,15 @@ defmodule Dexterity.Backend.Mock do
           file_nodes: [String.t()],
           symbols_by_file: map(),
           definitions: [Dexterity.Backend.symbol()],
-          references: [%{module: String.t(), function: String.t(), arity: integer(), file: String.t(), line: integer()}],
+          references: [
+            %{
+              module: String.t(),
+              function: String.t(),
+              arity: integer(),
+              file: String.t(),
+              line: integer()
+            }
+          ],
           index_status: Dexterity.Backend.index_status()
         }
 
@@ -54,7 +62,8 @@ defmodule Dexterity.Backend.Mock do
   def list_file_nodes(_repo_root), do: {:ok, state().file_nodes}
 
   @impl Dexterity.Backend
-  def list_exported_symbols(_repo_root, file), do: {:ok, Map.get(state().symbols_by_file, file, [])}
+  def list_exported_symbols(_repo_root, file),
+    do: {:ok, Map.get(state().symbols_by_file, file, [])}
 
   @impl Dexterity.Backend
   def find_definition(_repo_root, module, function_name, arity) do
@@ -74,6 +83,7 @@ defmodule Dexterity.Backend.Mock do
   @impl Dexterity.Backend
   def find_references(_repo_root, module, function_name, arity) do
     refs = state().references
+
     filtered =
       refs
       |> Enum.filter(fn ref -> ref.module == module end)
@@ -101,13 +111,17 @@ defmodule Dexterity.Backend.Mock do
   def healthy?(_repo_root), do: {:ok, true}
 
   defp maybe_filter_function(symbols, nil), do: symbols
-  defp maybe_filter_function(symbols, function_name), do: Enum.filter(symbols, &(&1.function == function_name))
+
+  defp maybe_filter_function(symbols, function_name),
+    do: Enum.filter(symbols, &(&1.function == function_name))
 
   defp maybe_filter_arity(symbols, nil), do: symbols
   defp maybe_filter_arity(symbols, arity), do: Enum.filter(symbols, &(&1.arity == arity))
 
   defp maybe_filter_reference_function(refs, nil), do: refs
-  defp maybe_filter_reference_function(refs, function_name), do: Enum.filter(refs, &(&1.function == function_name))
+
+  defp maybe_filter_reference_function(refs, function_name),
+    do: Enum.filter(refs, &(&1.function == function_name))
 
   defp maybe_filter_reference_arity(refs, nil), do: refs
   defp maybe_filter_reference_arity(refs, arity), do: Enum.filter(refs, &(&1.arity == arity))

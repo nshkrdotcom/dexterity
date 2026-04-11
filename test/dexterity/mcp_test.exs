@@ -12,7 +12,8 @@ defmodule Dexterity.MCPTest do
     def list_file_nodes(_repo_root), do: {:ok, []}
 
     @impl true
-    def list_exported_symbols(_repo_root, _file), do: {:ok, [%{module: "A", function: "foo", arity: 1, file: "lib/a.ex", line: 1}]}
+    def list_exported_symbols(_repo_root, _file),
+      do: {:ok, [%{module: "A", function: "foo", arity: 1, file: "lib/a.ex", line: 1}]}
 
     @impl true
     def find_definition(_repo_root, _module, _function, _arity), do: {:ok, []}
@@ -63,7 +64,9 @@ defmodule Dexterity.MCPTest do
       "method" => "tools/list"
     }
 
-    assert {:ok, %{"result" => %{"tools" => tools}}} = Dexterity.MCP.handle_request(request, context())
+    assert {:ok, %{"result" => %{"tools" => tools}}} =
+             Dexterity.MCP.handle_request(request, context())
+
     names = Enum.map(tools, & &1["name"])
 
     assert "get_repo_map" in names
@@ -85,7 +88,9 @@ defmodule Dexterity.MCPTest do
       }
     }
 
-    assert {:ok, %{"result" => %{"result" => symbols}}} = Dexterity.MCP.handle_request(request, context())
+    assert {:ok, %{"result" => %{"result" => symbols}}} =
+             Dexterity.MCP.handle_request(request, context())
+
     assert is_list(symbols)
     assert length(symbols) == 1
   end

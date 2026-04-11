@@ -39,6 +39,7 @@ defmodule Dexterity.SummaryWorkerTest do
     marker = :erlang.unique_integer([:positive])
     calls = :atomics.new(1, [])
     parent = self()
+
     llm_fn = fn prompt ->
       count = :atomics.add_get(calls, 1, 1)
       send(parent, {:llm_attempt, count, prompt})

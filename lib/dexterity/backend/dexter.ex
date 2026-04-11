@@ -55,7 +55,7 @@ defmodule Dexterity.Backend.Dexter do
          :ok <- close(conn) do
       edges =
         for [source, target, ref_count] <- result.rows,
-            source != nil and target != nil and ref_count && ref_count > 0 do
+            (source != nil and target != nil and ref_count) && ref_count > 0 do
           {source, target, weight(ref_count)}
         end
 
@@ -196,6 +196,7 @@ defmodule Dexterity.Backend.Dexter do
 
       _ ->
         repo_root = repo_root || Config.repo_root()
+
         with {:ok, status} when status in [:ready, :missing, :stale] <- index_status(repo_root) do
           {:ok, status == :ready}
         end
@@ -231,9 +232,9 @@ defmodule Dexterity.Backend.Dexter do
       {output, _exit} ->
         {:error, {:command_failed, output}}
     end
-    rescue
-      error ->
-        {:error, {:command_failed, Exception.message(error)}}
+  rescue
+    error ->
+      {:error, {:command_failed, Exception.message(error)}}
   end
 
   defp exec_query(conn, sql) do

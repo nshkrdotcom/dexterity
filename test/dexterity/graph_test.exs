@@ -8,7 +8,9 @@ defmodule Dexterity.GraphTest do
     @behaviour Dexterity.Backend
 
     @impl true
-    def list_file_edges(_repo_root), do: {:ok, [{"lib/a.ex", "lib/b.ex", 1.0}, {"lib/b.ex", "lib/c.ex", 1.0}]}
+    def list_file_edges(_repo_root),
+      do: {:ok, [{"lib/a.ex", "lib/b.ex", 1.0}, {"lib/b.ex", "lib/c.ex", 1.0}]}
+
     @impl true
     def list_file_nodes(_repo_root), do: {:ok, ["lib/a.ex", "lib/b.ex", "lib/c.ex"]}
     @impl true
@@ -28,7 +30,12 @@ defmodule Dexterity.GraphTest do
   end
 
   setup do
-    root = Path.join(System.tmp_dir!(), "dexterity-graph-mod-test-#{:erlang.unique_integer([:positive])}")
+    root =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-graph-mod-test-#{:erlang.unique_integer([:positive])}"
+      )
+
     File.mkdir_p!(root)
 
     name =

@@ -5,7 +5,12 @@ defmodule Dexterity.Backend.DexterTest do
   alias Exqlite.Basic
 
   setup do
-    root = Path.join(System.tmp_dir!(), "dexterity-backend-test-#{:erlang.unique_integer([:positive])}")
+    root =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-backend-test-#{:erlang.unique_integer([:positive])}"
+      )
+
     db_path = Path.join(root, ".dexter.db")
 
     File.mkdir_p!(root)
@@ -25,9 +30,9 @@ defmodule Dexterity.Backend.DexterTest do
 
     {:ok, _query, _result, _} =
       Basic.exec(
-      conn,
-      "INSERT INTO definitions VALUES ('MyModule', 'my_func', 1, 'lib/my_module.ex', 10)"
-    )
+        conn,
+        "INSERT INTO definitions VALUES ('MyModule', 'my_func', 1, 'lib/my_module.ex', 10)"
+      )
 
     {:ok, _query, _result, _} =
       Basic.exec(
@@ -50,14 +55,21 @@ defmodule Dexterity.Backend.DexterTest do
   end
 
   test "list_file_edges returns weighted file graph edges", %{repo_root: repo_root} do
-    assert {:ok, [{"lib/caller.ex", "lib/my_module.ex", _weight}]} = Dexter.list_file_edges(repo_root)
+    assert {:ok, [{"lib/caller.ex", "lib/my_module.ex", _weight}]} =
+             Dexter.list_file_edges(repo_root)
   end
 
   test "list_exported_symbols returns module symbols", %{repo_root: repo_root} do
     {:ok, symbols} = Dexter.list_exported_symbols(repo_root, "lib/my_module.ex")
 
     assert [
-             %{arity: 1, file: "lib/my_module.ex", function: "my_func", line: 10, module: "MyModule"}
+             %{
+               arity: 1,
+               file: "lib/my_module.ex",
+               function: "my_func",
+               line: 10,
+               module: "MyModule"
+             }
            ] = symbols
   end
 

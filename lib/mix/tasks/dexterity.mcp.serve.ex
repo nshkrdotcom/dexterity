@@ -16,7 +16,12 @@ defmodule Mix.Tasks.Dexterity.Mcp.Serve do
   @impl Mix.Task
   @spec run([String.t()]) :: no_return() | :ok
   def run(argv) do
-    parsed = OptionParser.parse!(argv, strict: [repo_root: :string, backend: :string], aliases: [r: :repo_root, b: :backend])
+    parsed =
+      OptionParser.parse!(argv,
+        strict: [repo_root: :string, backend: :string],
+        aliases: [r: :repo_root, b: :backend]
+      )
+
     opts = elem(parsed, 0)
     args = elem(parsed, 1)
 
@@ -38,7 +43,9 @@ defmodule Mix.Tasks.Dexterity.Mcp.Serve do
       Helpers.ensure_started!()
 
       if !Config.fetch(:mcp_enabled) do
-        Mix.shell().info("warning: mcp_enabled is false; proceeding because server is explicitly launched")
+        Mix.shell().info(
+          "warning: mcp_enabled is false; proceeding because server is explicitly launched"
+        )
       end
 
       Dexterity.MCP.serve(repo_root: repo_root, backend: backend)

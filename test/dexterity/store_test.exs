@@ -4,7 +4,12 @@ defmodule Dexterity.StoreTest do
   alias Dexterity.Store
 
   setup do
-    path = Path.join(System.tmp_dir!(), "dexterity-store-test-#{:erlang.unique_integer([:positive])}.db")
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-store-test-#{:erlang.unique_integer([:positive])}.db"
+      )
+
     File.rm(path)
 
     on_exit(fn -> File.rm(path) end)
@@ -16,10 +21,11 @@ defmodule Dexterity.StoreTest do
     assert {:ok, conn} = Store.open(path)
     assert File.exists?(path)
 
-    {:ok, _query, result, _conn} = Exqlite.Basic.exec(
-      conn,
-      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
-    )
+    {:ok, _query, result, _conn} =
+      Exqlite.Basic.exec(
+        conn,
+        "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+      )
 
     rows = result.rows |> List.flatten()
     assert "cochanges" in rows
@@ -59,7 +65,8 @@ defmodule Dexterity.StoreTest do
                1_700_001
              )
 
-    assert {:ok, {"Summary", 1_700_000, ^signature}} = Store.get_summary(conn, "lib/a.ex", "MyModule")
+    assert {:ok, {"Summary", 1_700_000, ^signature}} =
+             Store.get_summary(conn, "lib/a.ex", "MyModule")
 
     assert :ok = Store.close(conn)
   end
@@ -67,7 +74,9 @@ defmodule Dexterity.StoreTest do
   test "pagerank cache read/write works", %{path: path} do
     {:ok, conn} = Store.open(path)
 
-    assert :ok = Store.upsert_pagerank_cache(conn, %{"lib/a.ex" => 0.8, "lib/b.ex" => 0.2}, 1_700_000)
+    assert :ok =
+             Store.upsert_pagerank_cache(conn, %{"lib/a.ex" => 0.8, "lib/b.ex" => 0.2}, 1_700_000)
+
     assert {:ok, cache} = Store.list_pagerank_cache(conn)
     assert cache["lib/a.ex"] == 0.8
     assert cache["lib/b.ex"] == 0.2
