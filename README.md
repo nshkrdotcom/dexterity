@@ -12,10 +12,13 @@ Dexterity turns an Elixir codebase into a queryable context layer:
 
 - It reads semantic edges from a Dexter-produced `.dexter.db`.
 - It builds a ranked repository graph with metadata-derived links.
+- It exports normalized file and symbol graph snapshots for downstream consumers.
 - It renders a token-budgeted repo map for agent prompts.
 - It exposes semantic queries and an optional stdio MCP server.
 
 If you want exact, repeatable codebase context instead of ad hoc grep output, this is the layer Dexterity provides.
+
+Dexterity is also the right structural kernel to build on if you plan to add a separate semantic retrieval library or a higher-level code intelligence platform later. The graph, snapshot, impact, and runtime surfaces are meant to be consumed directly without reaching into internal servers.
 
 ## What You Get
 
@@ -23,10 +26,11 @@ If you want exact, repeatable codebase context instead of ad hoc grep output, th
 - `Dexterity.get_ranked_files/1` with active-file, edit, and conversation-term ranking inputs.
 - `Dexterity.get_ranked_symbols/1` for symbol-level ranking over the same repo state.
 - `Dexterity.get_impact_context/1` for adaptive, diff-aware symbol context.
+- `Dexterity.get_file_graph_snapshot/1`, `Dexterity.get_symbol_graph_snapshot/1`, and `Dexterity.get_structural_snapshot/1` for stable structural exports.
 - `Dexterity.get_symbols/2`, `Dexterity.find_symbols/2`, and `Dexterity.match_files/2` for targeted discovery.
 - `Dexterity.get_module_deps/2` and `Dexterity.get_file_blast_radius/2` for impact checks.
 - `Dexterity.get_export_analysis/1`, `Dexterity.get_unused_exports/1`, and `Dexterity.get_test_only_exports/1` for callback-aware export analysis.
-- `Dexterity.record_runtime_observations/2` and `Dexterity.import_cover_modules/2` for persisted runtime confirmation.
+- `Dexterity.get_runtime_observations/1`, `Dexterity.record_runtime_observations/2`, and `Dexterity.import_cover_modules/2` for persisted runtime confirmation.
 - `Dexterity.Query` for definitions, references, blast radius, and cochange neighbors.
 - Mix tasks for indexing, status, map rendering, and query execution.
 - Optional MCP transport over stdio for editor and agent integrations.
@@ -108,6 +112,10 @@ mix dexterity.query blast_count lib/my_app/accounts.ex --repo-root .
 mix dexterity.query cochanges lib/my_app/accounts.ex --repo-root . --limit 10
 mix dexterity.query symbols refund --repo-root .
 mix dexterity.query files '%accounts%' --repo-root .
+mix dexterity.query file_graph --repo-root .
+mix dexterity.query symbol_graph --repo-root .
+mix dexterity.query runtime_observations --repo-root .
+mix dexterity.query structural_snapshot --repo-root . --include-export-analysis --include-runtime-observations
 mix dexterity.query ranked_symbols --repo-root . --active-file lib/my_app/accounts.ex
 mix dexterity.query impact_context --repo-root . --changed-file lib/my_app/accounts.ex --token-budget 2048
 mix dexterity.query export_analysis --repo-root .
@@ -160,6 +168,18 @@ mix dexterity.query test_only_exports --repo-root .
     backend: Dexterity.Backend.Dexter
   )
 
+{:ok, file_graph} =
+  Dexterity.get_file_graph_snapshot(
+    repo_root: "/workspace/my_app",
+    backend: Dexterity.Backend.Dexter
+  )
+
+{:ok, symbol_graph} =
+  Dexterity.get_symbol_graph_snapshot(
+    repo_root: "/workspace/my_app",
+    backend: Dexterity.Backend.Dexter
+  )
+
 {:ok, ranked_symbols} =
   Dexterity.get_ranked_symbols(
     repo_root: "/workspace/my_app",
@@ -195,9 +215,17 @@ mix dexterity.query test_only_exports --repo-root .
     repo_root: "/workspace/my_app",
     backend: Dexterity.Backend.Dexter
   )
+
+{:ok, structural_snapshot} =
+  Dexterity.get_structural_snapshot(
+    repo_root: "/workspace/my_app",
+    backend: Dexterity.Backend.Dexter,
+    include_export_analysis: true,
+    include_runtime_observations: true
+  )
 ```
 
-`Dexterity.get_repo_map/1` is the main file-level integration point for agent context. `get_ranked_symbols/1` and `get_impact_context/1` sit on top of the symbol graph and are the higher-precision surfaces to use when you already know what changed or which file the model is focused on. `get_export_analysis/1` separates ordinary public API from callback entrypoints and can fold in persisted runtime confirmation from `import_cover_modules/2`.
+`Dexterity.get_repo_map/1` is the main file-level integration point for agent context. `get_ranked_symbols/1` and `get_impact_context/1` sit on top of the symbol graph and are the higher-precision surfaces to use when you already know what changed or which file the model is focused on. `get_file_graph_snapshot/1`, `get_symbol_graph_snapshot/1`, and `get_structural_snapshot/1` are the stable kernel exports to use when you are building a sibling semantic indexer or a larger platform on top of Dexterity. `get_export_analysis/1` separates ordinary public API from callback entrypoints and can fold in persisted runtime confirmation from `import_cover_modules/2`.
 
 ## MCP Server
 
@@ -210,13 +238,17 @@ mix dexterity.mcp.serve --repo-root .
 Supported tools include:
 
 - `get_repo_map`
+- `get_file_graph_snapshot`
 - `get_ranked_files`
 - `get_ranked_symbols`
 - `get_impact_context`
 - `find_symbols`
 - `match_files`
 - `get_symbols`
+- `get_symbol_graph_snapshot`
+- `get_structural_snapshot`
 - `get_export_analysis`
+- `get_runtime_observations`
 - `get_file_blast_radius`
 - `get_unused_exports`
 - `get_test_only_exports`
@@ -242,12 +274,13 @@ That example shows:
 - real git-driven cochange ingestion
 - ranked repo map generation with adaptive auto budgeting and conversation-term boosts
 - symbol-level ranking and adaptive impact-context rendering
+- normalized file, symbol, and combined structural snapshot export
 - semantic symbol and file lookup
 - definition and reference queries
 - dependency lookup and direct blast radius counts
 - cochange enrichment
 - callback-aware export analysis and unused/test-only filtered views
-- real `:cover` import for runtime-confirmed exports
+- raw runtime observations plus real `:cover` import for runtime-confirmed exports
 - real file reindexing
 - live MCP JSON-RPC requests
 

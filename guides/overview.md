@@ -7,6 +7,7 @@ Dexterity is an Elixir OTP library that builds ranked, context-aware codebase sn
 - Reads semantic graph data from `.dexter.db` (Dexter backend).
 - Builds a file-to-file graph for PageRank ranking.
 - Builds a symbol-to-symbol graph for higher-precision ranking and change impact.
+- Exports normalized file/symbol/combined structural snapshots for downstream buildout layers.
 - Applies contextual boosts based on `active_file`, `mentioned_files`, and `edited_files`.
 - Enriches rank signals with temporal coupling from `git log`.
 - Enriches graph edges from source-aware `use`, `@behaviour`, and `defimpl` relationships.
@@ -14,7 +15,7 @@ Dexterity is an Elixir OTP library that builds ranked, context-aware codebase sn
 
 ## Core abstractions
 
-- `Dexterity` public API for repo map, symbols, dependencies, and status.
+- `Dexterity` public API for repo map, snapshots, symbols, dependencies, runtime observations, and status.
 - `Dexterity.Backend` behavior to abstract Dexter and future providers.
 - `Dexterity.GraphServer` for graph/rank state and stale invalidation.
 - `Dexterity.SymbolGraphServer` for symbol graph/rank state and stale invalidation.

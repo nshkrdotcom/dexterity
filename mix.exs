@@ -71,6 +71,7 @@ defmodule Dexterity.MixProject do
         "guides/overview.md": [title: "Overview"],
         "guides/quickstart.md": [title: "Quickstart"],
         "guides/architecture.md": [title: "Architecture"],
+        "guides/kernel_surfaces.md": [title: "Kernel Surfaces"],
         "guides/api_reference.md": [title: "API Reference"],
         "guides/configuration.md": [title: "Configuration"],
         "guides/mcp.md": [title: "MCP Server"],

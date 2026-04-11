@@ -26,7 +26,12 @@ defmodule Dexterity.GraphServer do
 
   def start_link(opts) do
     name = Keyword.get(opts, :name, __MODULE__)
-    GenServer.start_link(__MODULE__, init_state(opts), name: name)
+
+    if is_nil(name) do
+      GenServer.start_link(__MODULE__, init_state(opts))
+    else
+      GenServer.start_link(__MODULE__, init_state(opts), name: name)
+    end
   end
 
   def get_repo_map(server \\ __MODULE__, context_files \\ [], opts \\ []) do

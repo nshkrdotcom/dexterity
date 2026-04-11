@@ -9,7 +9,15 @@ defmodule Dexterity.Backend.Dexter do
   alias Dexterity.SymbolSource
   alias Exqlite.Basic
 
-  @public_definition_kinds ["def", "defmacro", "defguard", "defdelegate", "type", "opaque", "function"]
+  @public_definition_kinds [
+    "def",
+    "defmacro",
+    "defguard",
+    "defdelegate",
+    "type",
+    "opaque",
+    "function"
+  ]
 
   @file_edges_sql """
   SELECT

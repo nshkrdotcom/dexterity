@@ -121,6 +121,12 @@ defmodule Examples.ComprehensiveRealBackend do
       print_heading("Indexed File Match")
       IO.inspect(Dexterity.match_files("%accounts%"), pretty: true)
 
+      print_heading("File Graph Snapshot")
+      IO.inspect(Dexterity.get_file_graph_snapshot(), pretty: true)
+
+      print_heading("Symbol Graph Snapshot")
+      IO.inspect(Dexterity.get_symbol_graph_snapshot(), pretty: true)
+
       print_heading("Direct Blast Radius")
       IO.inspect(Dexterity.get_file_blast_radius("lib/my_app/accounts.ex"), pretty: true)
 
@@ -149,6 +155,19 @@ defmodule Examples.ComprehensiveRealBackend do
 
       print_heading("Export Analysis")
       IO.inspect(Dexterity.get_export_analysis(), pretty: true)
+
+      print_heading("Runtime Observations")
+      IO.inspect(Dexterity.get_runtime_observations(), pretty: true)
+
+      print_heading("Structural Snapshot")
+
+      IO.inspect(
+        Dexterity.get_structural_snapshot(
+          include_export_analysis: true,
+          include_runtime_observations: true
+        ),
+        pretty: true
+      )
 
       print_heading("Unused Exports")
       IO.inspect(Dexterity.get_unused_exports(), pretty: true)
@@ -467,6 +486,22 @@ defmodule Examples.ComprehensiveRealBackend do
       repo_root
     ])
 
+    print_heading("Mix Task: dexterity.query file_graph")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "file_graph",
+      "--repo-root",
+      repo_root
+    ])
+
+    print_heading("Mix Task: dexterity.query symbol_graph")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "symbol_graph",
+      "--repo-root",
+      repo_root
+    ])
+
     print_heading("Mix Task: dexterity.query ranked_symbols")
 
     run_mix_task!("dexterity.query", QueryTask, [
@@ -525,13 +560,32 @@ defmodule Examples.ComprehensiveRealBackend do
       "--repo-root",
       repo_root
     ])
+
+    print_heading("Mix Task: dexterity.query runtime_observations")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "runtime_observations",
+      "--repo-root",
+      repo_root
+    ])
+
+    print_heading("Mix Task: dexterity.query structural_snapshot")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "structural_snapshot",
+      "--repo-root",
+      repo_root,
+      "--include-export-analysis",
+      "--include-runtime-observations"
+    ])
   end
 
   defp run_mcp_demo(repo_root) do
     context = %{
       backend: Dexterity.Backend.Dexter,
       repo_root: repo_root,
-      graph_server: Dexterity.GraphServer
+      graph_server: Dexterity.GraphServer,
+      symbol_graph_server: Dexterity.SymbolGraphServer
     }
 
     print_heading("MCP initialize")
@@ -572,6 +626,18 @@ defmodule Examples.ComprehensiveRealBackend do
       }
     }, context)
 
+    print_heading("MCP tools/call get_file_graph_snapshot")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 41,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_file_graph_snapshot",
+        "arguments" => %{}
+      }
+    }, context)
+
     print_heading("MCP tools/call find_symbols")
 
     mcp_request!(%{
@@ -597,6 +663,18 @@ defmodule Examples.ComprehensiveRealBackend do
           "mentioned_files" => ["lib/my_app/accounts.ex"],
           "limit" => 6
         }
+      }
+    }, context)
+
+    print_heading("MCP tools/call get_symbol_graph_snapshot")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 53,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_symbol_graph_snapshot",
+        "arguments" => %{}
       }
     }, context)
 
@@ -637,6 +715,33 @@ defmodule Examples.ComprehensiveRealBackend do
       "params" => %{
         "name" => "get_export_analysis",
         "arguments" => %{"limit" => 20}
+      }
+    }, context)
+
+    print_heading("MCP tools/call get_runtime_observations")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 8,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_runtime_observations",
+        "arguments" => %{}
+      }
+    }, context)
+
+    print_heading("MCP tools/call get_structural_snapshot")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 9,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_structural_snapshot",
+        "arguments" => %{
+          "include_export_analysis" => true,
+          "include_runtime_observations" => true
+        }
       }
     }, context)
   end

@@ -19,12 +19,16 @@ defmodule Dexterity.MCP do
     {"find_symbols", "Search exported symbols across indexed files"},
     {"match_files", "Match indexed file paths with SQL LIKE wildcards"},
     {"get_file_blast_radius", "Count direct dependents for a file"},
+    {"get_file_graph_snapshot", "Get normalized file graph snapshot"},
     {"get_ranked_files", "Get ranked files list"},
     {"get_ranked_symbols", "Get ranked symbols list"},
     {"get_impact_context", "Get rendered impact context for changed symbols/files"},
     {"get_repo_map", "Get rendered ranked repo map"},
+    {"get_symbol_graph_snapshot", "Get normalized symbol graph snapshot"},
+    {"get_structural_snapshot", "Get combined structural snapshot"},
     {"get_symbols", "Get exported symbols for a file"},
     {"get_export_analysis", "Get full export reachability analysis"},
+    {"get_runtime_observations", "Get raw persisted runtime observations"},
     {"get_unused_exports", "Find exports with no external references"},
     {"get_test_only_exports", "Find exports referenced only by tests"},
     {"get_module_deps", "Get module dependencies"},
@@ -232,6 +236,11 @@ defmodule Dexterity.MCP do
     |> call_result()
   end
 
+  defp dispatch_tool("get_file_graph_snapshot", params, context) do
+    Elixir.Dexterity.get_file_graph_snapshot(analysis_opts(params, context))
+    |> call_result()
+  end
+
   defp dispatch_tool("get_ranked_files", params, context) do
     opts = map_query_opts(params, context)
 
@@ -274,6 +283,27 @@ defmodule Dexterity.MCP do
     |> call_result()
   end
 
+  defp dispatch_tool("get_symbol_graph_snapshot", params, context) do
+    Elixir.Dexterity.get_symbol_graph_snapshot(analysis_opts(params, context))
+    |> call_result()
+  end
+
+  defp dispatch_tool("get_structural_snapshot", params, context) do
+    opts =
+      analysis_opts(params, context)
+      |> Keyword.put(
+        :include_export_analysis,
+        parse_boolean(get_optional(params, "include_export_analysis"), fallback: false)
+      )
+      |> Keyword.put(
+        :include_runtime_observations,
+        parse_boolean(get_optional(params, "include_runtime_observations"), fallback: false)
+      )
+
+    Elixir.Dexterity.get_structural_snapshot(opts)
+    |> call_result()
+  end
+
   defp dispatch_tool("get_symbols", params, context) do
     file = get_required(params, "file")
     opts = tool_opts(params, context)
@@ -287,6 +317,11 @@ defmodule Dexterity.MCP do
     opts = Keyword.put(analysis_opts(params, context), :limit, limit)
 
     Elixir.Dexterity.get_export_analysis(opts)
+    |> call_result()
+  end
+
+  defp dispatch_tool("get_runtime_observations", params, context) do
+    Elixir.Dexterity.get_runtime_observations(tool_opts(params, context))
     |> call_result()
   end
 
@@ -329,10 +364,28 @@ defmodule Dexterity.MCP do
     |> call_result()
   end
 
-  defp call_result({:ok, result}), do: {:ok, %{"result" => result}}
+  defp call_result({:ok, result}), do: {:ok, %{"result" => normalize_result(result)}}
 
   defp call_result({:error, reason}),
     do: {:error, @invalid_params, "request failed", inspect(reason)}
+
+  defp normalize_result(%_struct{} = struct) do
+    struct
+    |> Map.from_struct()
+    |> normalize_result()
+  end
+
+  defp normalize_result(map) when is_map(map) do
+    Map.new(map, fn {key, value} ->
+      {to_string(key), normalize_result(value)}
+    end)
+  end
+
+  defp normalize_result(list) when is_list(list) do
+    Enum.map(list, &normalize_result/1)
+  end
+
+  defp normalize_result(other), do: other
 
   defp tool_opts(params, context) do
     repo_root = get_optional(params, "repo_root") || context.repo_root

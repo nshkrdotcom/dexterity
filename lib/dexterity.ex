@@ -6,14 +6,18 @@ defmodule Dexterity do
   alias Dexterity.AnalysisSupport
   alias Dexterity.Config
   alias Dexterity.ExportAnalysis
+  alias Dexterity.FileGraphSnapshot
   alias Dexterity.GraphServer
   alias Dexterity.Intelligence
   alias Dexterity.Metadata
   alias Dexterity.Render
   alias Dexterity.Store
   alias Dexterity.StoreServer
+  alias Dexterity.StructuralExports
+  alias Dexterity.StructuralSnapshot
   alias Dexterity.SummaryWorker
   alias Dexterity.SymbolGraphServer
+  alias Dexterity.SymbolGraphSnapshot
 
   @type context_opts :: [
           active_file: String.t(),
@@ -89,6 +93,16 @@ defmodule Dexterity do
           optional(:source) => String.t()
         }
 
+  @type runtime_observation :: %{
+          file: String.t(),
+          module: String.t(),
+          function: String.t(),
+          arity: non_neg_integer(),
+          source: String.t(),
+          call_count: non_neg_integer(),
+          observed_at: integer()
+        }
+
   @doc """
   Returns ranked and rendered repository context.
   """
@@ -96,7 +110,6 @@ defmodule Dexterity do
   def get_repo_map(opts \\ []) do
     backend = Keyword.get(opts, :backend, Config.fetch(:backend))
     repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
-    graph_server = Keyword.get(opts, :graph_server, GraphServer)
     budget = Keyword.get(opts, :token_budget, :auto)
     {min_budget, default_budget, max_budget} = Config.token_budget_range()
 
@@ -115,20 +128,22 @@ defmodule Dexterity do
     context_files = context_files(opts)
     conversation_terms = Keyword.get(opts, :conversation_terms, [])
 
-    with {:ok, ranked} <-
-           GraphServer.get_repo_map(
-             graph_server,
-             context_files,
-             limit: limit,
-             conversation_terms: conversation_terms
-           ),
-         {:ok, ranked_list} <- normalize_ranked(ranked, Keyword.get(opts, :min_rank, 0.0)),
-         {:ok, metadata} <- fetch_metadata(graph_server),
-         {:ok, symbols} <- fetch_symbols(backend, repo_root, ranked_list),
-         {:ok, summaries} <- fetch_summaries(ranked_list, metadata, symbols, repo_root, opts),
-         {:ok, clones} <- detect_clones(ranked_list, metadata, include_clones, opts) do
-      {:ok, Render.render_files(ranked_list, symbols, summaries, clones, metadata, budget)}
-    end
+    with_file_graph_server(opts, fn resolved_graph_server ->
+      with {:ok, ranked} <-
+             GraphServer.get_repo_map(
+               resolved_graph_server,
+               context_files,
+               limit: limit,
+               conversation_terms: conversation_terms
+             ),
+           {:ok, ranked_list} <- normalize_ranked(ranked, Keyword.get(opts, :min_rank, 0.0)),
+           {:ok, metadata} <- fetch_metadata(resolved_graph_server),
+           {:ok, symbols} <- fetch_symbols(backend, repo_root, ranked_list),
+           {:ok, summaries} <- fetch_summaries(ranked_list, metadata, symbols, repo_root, opts),
+           {:ok, clones} <- detect_clones(ranked_list, metadata, include_clones, opts) do
+        {:ok, Render.render_files(ranked_list, symbols, summaries, clones, metadata, budget)}
+      end
+    end)
   end
 
   @doc """
@@ -136,24 +151,25 @@ defmodule Dexterity do
   """
   @spec get_ranked_files(context_opts()) :: {:ok, [{String.t(), float()}]} | {:error, term()}
   def get_ranked_files(opts \\ []) do
-    graph_server = Keyword.get(opts, :graph_server, GraphServer)
     limit = Keyword.get(opts, :limit, 200)
 
     context_files = context_files(opts)
     conversation_terms = Keyword.get(opts, :conversation_terms, [])
 
-    with {:ok, ranked} <-
-           GraphServer.get_repo_map(
-             graph_server,
-             context_files,
-             limit: limit,
-             conversation_terms: conversation_terms
-           ),
-         {:ok, ranked_list} <- normalize_ranked(ranked, Keyword.get(opts, :min_rank, 0.0)) do
-      {:ok, ranked_list}
-    else
-      {:error, reason} -> {:error, reason}
-    end
+    with_file_graph_server(opts, fn resolved_graph_server ->
+      with {:ok, ranked} <-
+             GraphServer.get_repo_map(
+               resolved_graph_server,
+               context_files,
+               limit: limit,
+               conversation_terms: conversation_terms
+             ),
+           {:ok, ranked_list} <- normalize_ranked(ranked, Keyword.get(opts, :min_rank, 0.0)) do
+        {:ok, ranked_list}
+      else
+        {:error, reason} -> {:error, reason}
+      end
+    end)
   end
 
   @doc """
@@ -161,29 +177,33 @@ defmodule Dexterity do
   """
   @spec get_ranked_symbols(context_opts()) :: {:ok, [map()]} | {:error, term()}
   def get_ranked_symbols(opts \\ []) do
-    with_symbol_graph_server(opts, fn symbol_graph_server ->
-      limit = Keyword.get(opts, :limit, 50)
-      min_rank = Keyword.get(opts, :min_rank, 0.0)
-      conversation_terms = Keyword.get(opts, :conversation_terms, [])
+    with_file_graph_server(opts, fn resolved_graph_server ->
+      resolved_opts = Keyword.put(opts, :graph_server, resolved_graph_server)
 
-      symbol_context = %{
-        files: context_files(opts),
-        symbols: Keyword.get(opts, :changed_symbols, [])
-      }
+      with_symbol_graph_server(resolved_opts, fn symbol_graph_server ->
+        limit = Keyword.get(opts, :limit, 50)
+        min_rank = Keyword.get(opts, :min_rank, 0.0)
+        conversation_terms = Keyword.get(opts, :conversation_terms, [])
 
-      with {:ok, ranked} <-
-             SymbolGraphServer.get_ranked_symbols(
-               symbol_graph_server,
-               symbol_context,
-               limit: max(limit * 3, limit),
-               conversation_terms: conversation_terms
-             ) do
-        ranked
-        |> blend_symbol_scores(opts)
-        |> Enum.filter(&((Map.get(&1, :rank, 0.0) || 0.0) >= min_rank))
-        |> Enum.take(limit)
-        |> then(&{:ok, &1})
-      end
+        symbol_context = %{
+          files: context_files(opts),
+          symbols: Keyword.get(opts, :changed_symbols, [])
+        }
+
+        with {:ok, ranked} <-
+               SymbolGraphServer.get_ranked_symbols(
+                 symbol_graph_server,
+                 symbol_context,
+                 limit: max(limit * 3, limit),
+                 conversation_terms: conversation_terms
+               ) do
+          ranked
+          |> blend_symbol_scores(resolved_opts)
+          |> Enum.filter(&((Map.get(&1, :rank, 0.0) || 0.0) >= min_rank))
+          |> Enum.take(limit)
+          |> then(&{:ok, &1})
+        end
+      end)
     end)
   rescue
     _ -> {:error, :symbol_graph_unavailable}
@@ -227,41 +247,156 @@ defmodule Dexterity do
   end
 
   @doc """
+  Returns a normalized file-graph snapshot for downstream consumers.
+  """
+  @spec get_file_graph_snapshot(keyword()) :: {:ok, FileGraphSnapshot.t()} | {:error, term()}
+  def get_file_graph_snapshot(opts \\ []) do
+    snapshot_opts =
+      opts
+      |> Keyword.put_new(:backend, Config.fetch(:backend))
+      |> Keyword.put_new(:repo_root, Config.repo_root())
+
+    with_file_graph_server(snapshot_opts, fn resolved_graph_server ->
+      StructuralExports.build_file_graph_snapshot(resolved_graph_server, snapshot_opts)
+    end)
+  rescue
+    _ -> {:error, :graph_unavailable}
+  end
+
+  @doc """
+  Returns a normalized symbol-graph snapshot for downstream consumers.
+  """
+  @spec get_symbol_graph_snapshot(keyword()) :: {:ok, SymbolGraphSnapshot.t()} | {:error, term()}
+  def get_symbol_graph_snapshot(opts \\ []) do
+    snapshot_opts =
+      opts
+      |> Keyword.put_new(:backend, Config.fetch(:backend))
+      |> Keyword.put_new(:repo_root, Config.repo_root())
+
+    with_symbol_graph_server(snapshot_opts, fn resolved_symbol_graph_server ->
+      StructuralExports.build_symbol_graph_snapshot(resolved_symbol_graph_server, snapshot_opts)
+    end)
+  rescue
+    _ -> {:error, :symbol_graph_unavailable}
+  end
+
+  @doc """
+  Returns a combined structural snapshot for downstream consumers.
+  """
+  @spec get_structural_snapshot(keyword()) :: {:ok, StructuralSnapshot.t()} | {:error, term()}
+  def get_structural_snapshot(opts \\ []) do
+    snapshot_opts =
+      opts
+      |> Keyword.put_new(:backend, Config.fetch(:backend))
+      |> Keyword.put_new(:repo_root, Config.repo_root())
+
+    include_runtime_observations =
+      Keyword.get(snapshot_opts, :include_runtime_observations, false)
+
+    include_export_analysis = Keyword.get(snapshot_opts, :include_export_analysis, false)
+
+    with {:ok, file_graph} <- get_file_graph_snapshot(snapshot_opts),
+         {:ok, symbol_graph} <- get_symbol_graph_snapshot(snapshot_opts),
+         {:ok, runtime_observations} <-
+           maybe_runtime_observations(snapshot_opts, include_runtime_observations),
+         {:ok, export_analysis} <- maybe_export_analysis(snapshot_opts, include_export_analysis) do
+      {:ok,
+       StructuralExports.build_structural_snapshot(
+         file_graph,
+         symbol_graph,
+         snapshot_opts
+         |> Keyword.put(:runtime_observations, runtime_observations)
+         |> Keyword.put(:export_analysis, export_analysis)
+       )}
+    end
+  end
+
+  @doc """
   Searches exported symbols across indexed files.
   """
   @spec find_symbols(String.t(), keyword()) :: {:ok, [ranked_symbol()]} | {:error, term()}
-  def find_symbols(query, opts \\ []), do: Intelligence.find_symbols(query, opts)
+  def find_symbols(query, opts \\ []) do
+    with_file_graph_server(opts, fn resolved_graph_server ->
+      Intelligence.find_symbols(query, Keyword.put(opts, :graph_server, resolved_graph_server))
+    end)
+  rescue
+    _ -> {:error, :graph_unavailable}
+  end
 
   @doc """
   Matches indexed file paths with SQL LIKE style wildcards.
   """
   @spec match_files(String.t(), keyword()) :: {:ok, [String.t()]} | {:error, term()}
-  def match_files(pattern, opts \\ []), do: Intelligence.match_files(pattern, opts)
+  def match_files(pattern, opts \\ []) do
+    with_file_graph_server(opts, fn resolved_graph_server ->
+      Intelligence.match_files(pattern, Keyword.put(opts, :graph_server, resolved_graph_server))
+    end)
+  rescue
+    _ -> {:error, :graph_unavailable}
+  end
 
   @doc """
   Returns the direct blast radius count for a file.
   """
   @spec get_file_blast_radius(String.t(), keyword()) ::
           {:ok, non_neg_integer()} | {:error, :graph_unavailable}
-  def get_file_blast_radius(file, opts \\ []), do: Intelligence.blast_radius_count(file, opts)
+  def get_file_blast_radius(file, opts \\ []) do
+    with_file_graph_server(opts, fn resolved_graph_server ->
+      Intelligence.blast_radius_count(
+        file,
+        Keyword.put(opts, :graph_server, resolved_graph_server)
+      )
+    end)
+  rescue
+    _ -> {:error, :graph_unavailable}
+  end
 
   @doc """
   Finds exported functions with no external references.
   """
   @spec get_unused_exports(keyword()) :: {:ok, [unused_export()]} | {:error, term()}
-  def get_unused_exports(opts \\ []), do: ExportAnalysis.unused_exports(opts)
+  def get_unused_exports(opts \\ []) do
+    with_file_graph_server(opts, fn resolved_graph_server ->
+      ExportAnalysis.unused_exports(Keyword.put(opts, :graph_server, resolved_graph_server))
+    end)
+  rescue
+    _ -> {:error, :graph_unavailable}
+  end
 
   @doc """
   Finds exported functions referenced only by tests.
   """
   @spec get_test_only_exports(keyword()) :: {:ok, [map()]} | {:error, term()}
-  def get_test_only_exports(opts \\ []), do: ExportAnalysis.test_only_exports(opts)
+  def get_test_only_exports(opts \\ []) do
+    with_file_graph_server(opts, fn resolved_graph_server ->
+      ExportAnalysis.test_only_exports(Keyword.put(opts, :graph_server, resolved_graph_server))
+    end)
+  rescue
+    _ -> {:error, :graph_unavailable}
+  end
 
   @doc """
   Returns the full export reachability report.
   """
   @spec get_export_analysis(keyword()) :: {:ok, [export_analysis()]} | {:error, term()}
-  def get_export_analysis(opts \\ []), do: ExportAnalysis.analyze_exports(opts)
+  def get_export_analysis(opts \\ []) do
+    with_file_graph_server(opts, fn resolved_graph_server ->
+      ExportAnalysis.analyze_exports(Keyword.put(opts, :graph_server, resolved_graph_server))
+    end)
+  rescue
+    _ -> {:error, :graph_unavailable}
+  end
+
+  @doc """
+  Returns raw persisted runtime observations.
+  """
+  @spec get_runtime_observations(keyword()) :: {:ok, [runtime_observation()]} | {:error, term()}
+  def get_runtime_observations(opts \\ []) do
+    case store_conn(opts) do
+      nil -> {:error, :store_unavailable}
+      conn -> Store.list_runtime_observations(conn)
+    end
+  end
 
   @doc """
   Persists runtime observations for indexed exports.
@@ -289,27 +424,31 @@ defmodule Dexterity do
   @spec get_module_deps(String.t(), keyword()) ::
           {:ok, %{dependencies: [String.t()], dependents: [String.t()]}} | {:error, term()}
   def get_module_deps(file, opts \\ []) do
-    case fetch_graph(opts) do
-      {:ok, graph} ->
-        outgoing =
-          graph
-          |> Map.get(file, %{})
-          |> Map.keys()
-          |> Enum.uniq()
-          |> Enum.sort()
+    with_file_graph_server(opts, fn resolved_graph_server ->
+      case fetch_graph(Keyword.put(opts, :graph, resolved_graph_server)) do
+        {:ok, graph} ->
+          outgoing =
+            graph
+            |> Map.get(file, %{})
+            |> Map.keys()
+            |> Enum.uniq()
+            |> Enum.sort()
 
-        incoming =
-          graph
-          |> Enum.filter(fn {_from, out} -> Map.has_key?(out, file) end)
-          |> Enum.map(fn {from, _} -> from end)
-          |> Enum.uniq()
-          |> Enum.sort()
+          incoming =
+            graph
+            |> Enum.filter(fn {_from, out} -> Map.has_key?(out, file) end)
+            |> Enum.map(fn {from, _} -> from end)
+            |> Enum.uniq()
+            |> Enum.sort()
 
-        {:ok, %{dependencies: outgoing, dependents: incoming}}
+          {:ok, %{dependencies: outgoing, dependents: incoming}}
 
-      {:error, _reason} ->
-        {:error, :graph_unavailable}
-    end
+        {:error, _reason} ->
+          {:error, :graph_unavailable}
+      end
+    end)
+  rescue
+    _ -> {:error, :graph_unavailable}
   end
 
   @doc """
@@ -511,12 +650,78 @@ defmodule Dexterity do
   defp normalize_budget(value) when is_integer(value) and value > 0, do: value
   defp normalize_budget(_value), do: 2_048
 
+  defp with_file_graph_server(opts, fun) do
+    case resolve_file_graph_server(Keyword.get(opts, :graph_server, GraphServer), opts) do
+      {:ok, server} ->
+        ensure_file_graph_loaded(server)
+        fun.(server)
+
+      :error ->
+        backend = Keyword.get(opts, :backend, Config.fetch(:backend))
+        repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
+
+        {:ok, pid} =
+          GraphServer.start_link(
+            repo_root: repo_root,
+            backend: backend,
+            store_conn: store_conn(opts),
+            name: nil
+          )
+
+        try do
+          ensure_file_graph_loaded(pid)
+          fun.(pid)
+        after
+          GenServer.stop(pid, :normal, 5_000)
+        end
+    end
+  end
+
+  defp resolve_file_graph_server(server, opts) when is_pid(server) do
+    if Process.alive?(server) and file_graph_matches?(server, opts) do
+      {:ok, server}
+    else
+      :error
+    end
+  end
+
+  defp resolve_file_graph_server(server, opts) when is_atom(server) do
+    case Process.whereis(server) do
+      pid when is_pid(pid) ->
+        if file_graph_matches?(pid, opts), do: {:ok, pid}, else: :error
+
+      _ ->
+        :error
+    end
+  end
+
+  defp resolve_file_graph_server(_server, _opts), do: :error
+
+  defp ensure_file_graph_loaded(server) do
+    _ = GraphServer.get_metadata(server)
+    _ = GraphServer.get_baseline_rank(server)
+    :ok
+  end
+
+  defp file_graph_matches?(pid, opts) do
+    state = :sys.get_state(pid)
+    requested_repo_root = Keyword.get(opts, :repo_root, Config.repo_root()) |> Path.expand()
+    requested_backend = Keyword.get(opts, :backend, Config.fetch(:backend))
+
+    state.repo_root |> Path.expand() == requested_repo_root and state.backend == requested_backend
+  rescue
+    _ -> false
+  catch
+    :exit, _reason -> false
+  end
+
   defp with_symbol_graph_server(opts, fun) do
     case resolve_symbol_graph_server(
            Keyword.get(opts, :symbol_graph_server, SymbolGraphServer),
            opts
          ) do
       {:ok, server} ->
+        ensure_symbol_graph_loaded(server)
         fun.(server)
 
       :error ->
@@ -527,6 +732,7 @@ defmodule Dexterity do
           SymbolGraphServer.start_link(repo_root: repo_root, backend: backend, name: nil)
 
         try do
+          ensure_symbol_graph_loaded(pid)
           fun.(pid)
         after
           GenServer.stop(pid, :normal, 5_000)
@@ -566,6 +772,12 @@ defmodule Dexterity do
     :exit, _reason -> false
   end
 
+  defp ensure_symbol_graph_loaded(server) do
+    _ = SymbolGraphServer.get_nodes(server)
+    _ = SymbolGraphServer.get_baseline_rank(server)
+    :ok
+  end
+
   defp context_files(opts) do
     ([Keyword.get(opts, :active_file)] ++
        Keyword.get(opts, :mentioned_files, []) ++
@@ -589,6 +801,18 @@ defmodule Dexterity do
 
   defp fetch_metadata(graph_server) do
     {:ok, GraphServer.get_metadata(graph_server)}
+  end
+
+  defp maybe_runtime_observations(_opts, false), do: {:ok, nil}
+
+  defp maybe_runtime_observations(opts, true) do
+    get_runtime_observations(opts)
+  end
+
+  defp maybe_export_analysis(_opts, false), do: {:ok, nil}
+
+  defp maybe_export_analysis(opts, true) do
+    get_export_analysis(opts)
   end
 
   defp fetch_summaries(ranked_files, metadata, symbols, repo_root, opts) do

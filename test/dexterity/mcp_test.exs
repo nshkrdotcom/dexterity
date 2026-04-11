@@ -98,7 +98,8 @@ defmodule Dexterity.MCPTest do
     %{
       backend: StubBackend,
       repo_root: ".",
-      graph_server: Dexterity.GraphServer
+      graph_server: Dexterity.GraphServer,
+      symbol_graph_server: Dexterity.SymbolGraphServer
     }
   end
 
@@ -137,6 +138,10 @@ defmodule Dexterity.MCPTest do
     assert "get_impact_context" in names
     assert "get_unused_exports" in names
     assert "get_export_analysis" in names
+    assert "get_file_graph_snapshot" in names
+    assert "get_symbol_graph_snapshot" in names
+    assert "get_structural_snapshot" in names
+    assert "get_runtime_observations" in names
   end
 
   test "tools/call delegates to API and returns result payload" do
@@ -157,7 +162,7 @@ defmodule Dexterity.MCPTest do
              Dexterity.MCP.handle_request(request, context())
 
     assert is_list(symbols)
-    assert Enum.any?(symbols, &(&1.function == "foo"))
+    assert Enum.any?(symbols, &(&1["function"] == "foo"))
   end
 
   test "invalid json line prints parse error" do
@@ -196,7 +201,7 @@ defmodule Dexterity.MCPTest do
     assert {:ok, %{"result" => %{"result" => [symbol | _]}}} =
              Dexterity.MCP.handle_request(symbol_request, context())
 
-    assert symbol.function == "foo"
+    assert symbol["function"] == "foo"
 
     unused_request = %{
       "jsonrpc" => "2.0",
@@ -211,7 +216,7 @@ defmodule Dexterity.MCPTest do
     assert {:ok, %{"result" => %{"result" => unused_exports}}} =
              Dexterity.MCP.handle_request(unused_request, context())
 
-    assert Enum.any?(unused_exports, &(&1.function == "unused"))
+    assert Enum.any?(unused_exports, &(&1["function"] == "unused"))
 
     ranked_symbols_request = %{
       "jsonrpc" => "2.0",
@@ -226,7 +231,7 @@ defmodule Dexterity.MCPTest do
     assert {:ok, %{"result" => %{"result" => ranked_symbols}}} =
              Dexterity.MCP.handle_request(ranked_symbols_request, context())
 
-    assert Enum.any?(ranked_symbols, &(&1.function == "foo"))
+    assert Enum.any?(ranked_symbols, &(&1["function"] == "foo"))
 
     export_analysis_request = %{
       "jsonrpc" => "2.0",
@@ -241,7 +246,7 @@ defmodule Dexterity.MCPTest do
     assert {:ok, %{"result" => %{"result" => export_analysis}}} =
              Dexterity.MCP.handle_request(export_analysis_request, context())
 
-    assert Enum.any?(export_analysis, &(&1.function == "foo" and &1.kind == :public_api))
+    assert Enum.any?(export_analysis, &(&1["function"] == "foo" and &1["kind"] == :public_api))
 
     impact_context_request = %{
       "jsonrpc" => "2.0",
@@ -271,6 +276,54 @@ defmodule Dexterity.MCPTest do
     assert {:ok, %{"result" => %{"result" => test_only_exports}}} =
              Dexterity.MCP.handle_request(test_only_request, context())
 
-    assert Enum.any?(test_only_exports, &(&1.function == "test_only"))
+    assert Enum.any?(test_only_exports, &(&1["function"] == "test_only"))
+  end
+
+  test "tools/call supports structural snapshot surfaces" do
+    file_graph_request = %{
+      "jsonrpc" => "2.0",
+      "id" => 70,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_file_graph_snapshot",
+        "arguments" => %{}
+      }
+    }
+
+    assert {:ok, %{"result" => %{"result" => file_graph}}} =
+             Dexterity.MCP.handle_request(file_graph_request, context())
+
+    assert Enum.any?(file_graph["files"], &(&1["file"] == "lib/a.ex"))
+
+    symbol_graph_request = %{
+      "jsonrpc" => "2.0",
+      "id" => 71,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_symbol_graph_snapshot",
+        "arguments" => %{}
+      }
+    }
+
+    assert {:ok, %{"result" => %{"result" => symbol_graph}}} =
+             Dexterity.MCP.handle_request(symbol_graph_request, context())
+
+    assert Enum.any?(symbol_graph["nodes"], &(&1["function"] == "foo"))
+
+    structural_snapshot_request = %{
+      "jsonrpc" => "2.0",
+      "id" => 72,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_structural_snapshot",
+        "arguments" => %{}
+      }
+    }
+
+    assert {:ok, %{"result" => %{"result" => structural_snapshot}}} =
+             Dexterity.MCP.handle_request(structural_snapshot_request, context())
+
+    assert structural_snapshot["file_graph"]["backend"] ==
+             "Dexterity.MCPTest.StubBackend"
   end
 end

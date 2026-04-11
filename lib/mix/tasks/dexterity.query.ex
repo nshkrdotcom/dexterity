@@ -10,6 +10,10 @@ defmodule Mix.Tasks.Dexterity.Query do
       mix dexterity.query cochanges <file> [--limit N]
       mix dexterity.query symbols <query> [--limit N]
       mix dexterity.query files <sql_like_pattern> [--limit N]
+      mix dexterity.query file_graph
+      mix dexterity.query symbol_graph
+      mix dexterity.query structural_snapshot [--include-export-analysis] [--include-runtime-observations]
+      mix dexterity.query runtime_observations
       mix dexterity.query ranked_symbols [--active-file path] [--mentioned-file path]
       mix dexterity.query impact_context [--changed-file path] [--token-budget N]
       mix dexterity.query export_analysis [--limit N]
@@ -40,7 +44,9 @@ defmodule Mix.Tasks.Dexterity.Query do
           active_file: :string,
           mentioned_file: :keep,
           edited_file: :keep,
-          changed_file: :keep
+          changed_file: :keep,
+          include_export_analysis: :boolean,
+          include_runtime_observations: :boolean
         ]
       )
 
@@ -50,7 +56,7 @@ defmodule Mix.Tasks.Dexterity.Query do
     if args == [] do
       Helpers.exit_with_error(
         "missing subcommand",
-        "expected references|definition|blast|blast_count|cochanges|symbols|files|ranked_symbols|impact_context|export_analysis|unused_exports|test_only_exports"
+        "expected references|definition|blast|blast_count|cochanges|symbols|files|file_graph|symbol_graph|structural_snapshot|runtime_observations|ranked_symbols|impact_context|export_analysis|unused_exports|test_only_exports"
       )
     end
 
@@ -91,6 +97,15 @@ defmodule Mix.Tasks.Dexterity.Query do
   defp dispatch_command("cochanges", params, opts), do: run_cochanges(params, opts)
   defp dispatch_command("symbols", params, opts), do: run_symbol_search(params, opts)
   defp dispatch_command("files", params, opts), do: run_file_match(params, opts)
+  defp dispatch_command("file_graph", params, opts), do: run_file_graph(params, opts)
+  defp dispatch_command("symbol_graph", params, opts), do: run_symbol_graph(params, opts)
+
+  defp dispatch_command("structural_snapshot", params, opts),
+    do: run_structural_snapshot(params, opts)
+
+  defp dispatch_command("runtime_observations", params, opts),
+    do: run_runtime_observations(params, opts)
+
   defp dispatch_command("ranked_symbols", params, opts), do: run_ranked_symbols(params, opts)
   defp dispatch_command("impact_context", params, opts), do: run_impact_context(params, opts)
   defp dispatch_command("export_analysis", params, opts), do: run_export_analysis(params, opts)
@@ -231,6 +246,84 @@ defmodule Mix.Tasks.Dexterity.Query do
 
   defp run_file_match(_params, _opts),
     do: Helpers.exit_with_error("files query accepts exactly one pattern", nil)
+
+  defp run_file_graph([], opts) do
+    query_opts = [
+      graph_server: GraphServer,
+      backend: Helpers.parse_backend(opts),
+      repo_root: Helpers.parse_repo_root(opts)
+    ]
+
+    case Dexterity.get_file_graph_snapshot(query_opts) do
+      {:ok, result} ->
+        render_query_result(:file_graph, result)
+
+      {:error, reason} ->
+        Helpers.exit_with_error("file_graph query failed", reason)
+    end
+  end
+
+  defp run_file_graph(_params, _opts),
+    do: Helpers.exit_with_error("file_graph does not accept positional arguments", nil)
+
+  defp run_symbol_graph([], opts) do
+    query_opts = [
+      symbol_graph_server: Dexterity.SymbolGraphServer,
+      backend: Helpers.parse_backend(opts),
+      repo_root: Helpers.parse_repo_root(opts)
+    ]
+
+    case Dexterity.get_symbol_graph_snapshot(query_opts) do
+      {:ok, result} ->
+        render_query_result(:symbol_graph, result)
+
+      {:error, reason} ->
+        Helpers.exit_with_error("symbol_graph query failed", reason)
+    end
+  end
+
+  defp run_symbol_graph(_params, _opts),
+    do: Helpers.exit_with_error("symbol_graph does not accept positional arguments", nil)
+
+  defp run_structural_snapshot([], opts) do
+    query_opts = [
+      graph_server: GraphServer,
+      symbol_graph_server: Dexterity.SymbolGraphServer,
+      backend: Helpers.parse_backend(opts),
+      repo_root: Helpers.parse_repo_root(opts),
+      include_export_analysis: Keyword.get(opts, :include_export_analysis, false),
+      include_runtime_observations: Keyword.get(opts, :include_runtime_observations, false)
+    ]
+
+    case Dexterity.get_structural_snapshot(query_opts) do
+      {:ok, result} ->
+        render_query_result(:structural_snapshot, result)
+
+      {:error, reason} ->
+        Helpers.exit_with_error("structural_snapshot query failed", reason)
+    end
+  end
+
+  defp run_structural_snapshot(_params, _opts),
+    do: Helpers.exit_with_error("structural_snapshot does not accept positional arguments", nil)
+
+  defp run_runtime_observations([], opts) do
+    query_opts = [
+      backend: Helpers.parse_backend(opts),
+      repo_root: Helpers.parse_repo_root(opts)
+    ]
+
+    case Dexterity.get_runtime_observations(query_opts) do
+      {:ok, result} ->
+        render_query_result(:runtime_observations, result)
+
+      {:error, reason} ->
+        Helpers.exit_with_error("runtime_observations query failed", reason)
+    end
+  end
+
+  defp run_runtime_observations(_params, _opts),
+    do: Helpers.exit_with_error("runtime_observations does not accept positional arguments", nil)
 
   defp run_ranked_symbols([], opts) do
     query_opts = ranked_symbol_opts(opts)

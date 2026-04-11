@@ -346,9 +346,39 @@ defmodule MixTasksTest do
     stop_app_if_running()
   end
 
-  test "dexterity.query symbols/files/blast_count/ranked_symbols/impact_context/export_analysis/unused_exports/test_only_exports surfaces",
+  test "dexterity.query symbols/files/blast_count/ranked_symbols/impact_context/export_analysis/unused_exports/test_only_exports/structural snapshot surfaces",
        %{repo_root: repo_root} do
     backend = QueryTaskBackend
+
+    store_path =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-mix-query-structural-store-#{:erlang.unique_integer([:positive])}.db"
+      )
+
+    previous_store_path = Application.get_env(:dexterity, :store_path)
+    {:ok, conn} = Store.open(store_path)
+
+    assert :ok =
+             Store.upsert_runtime_observation(
+               conn,
+               "lib/a.ex",
+               "MyModule",
+               "call",
+               1,
+               "cover",
+               2,
+               1_700_000
+             )
+
+    Application.put_env(:dexterity, :store_path, store_path)
+
+    on_exit(fn ->
+      stop_app_if_running()
+      Store.close(conn)
+      restore_env(:dexterity, :store_path, previous_store_path)
+      File.rm(store_path)
+    end)
 
     symbols =
       capture_io(fn ->
@@ -417,6 +447,62 @@ defmodule MixTasksTest do
       end)
 
     assert impact_context =~ "MyModule.call/1"
+
+    file_graph =
+      capture_io(fn ->
+        Query.run([
+          "file_graph",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          repo_root
+        ])
+      end)
+
+    assert file_graph =~ "lib/a.ex"
+    assert file_graph =~ "lib/b.ex"
+
+    symbol_graph =
+      capture_io(fn ->
+        Query.run([
+          "symbol_graph",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          repo_root
+        ])
+      end)
+
+    assert symbol_graph =~ "register_user"
+
+    structural_snapshot =
+      capture_io(fn ->
+        Query.run([
+          "structural_snapshot",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          repo_root,
+          "--include-export-analysis",
+          "--include-runtime-observations"
+        ])
+      end)
+
+    assert structural_snapshot =~ "file_graph"
+    assert structural_snapshot =~ "runtime_observations"
+
+    runtime_observations =
+      capture_io(fn ->
+        Query.run([
+          "runtime_observations",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          repo_root
+        ])
+      end)
+
+    assert runtime_observations =~ "cover"
 
     unused =
       capture_io(fn ->
