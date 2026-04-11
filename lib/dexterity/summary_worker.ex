@@ -1,24 +1,25 @@
 defmodule Dexterity.SummaryWorker do
   @moduledoc """
-  Background worker to fetch and cache LLM summaries for top-ranked modules.
+  Caches short semantic summaries in the metadata store.
   """
   use GenServer
 
-  alias Exqlite.Basic
+  alias Dexterity.Config
+  alias Dexterity.Store
+  alias Dexterity.StoreServer
 
   def start_link(opts) do
     name = Keyword.get(opts, :name, __MODULE__)
-    db_conn = Keyword.fetch!(opts, :db_conn)
-    llm_fn = Keyword.get(opts, :llm_fn, &default_llm_fn/1)
+    db_conn = Keyword.get(opts, :db_conn, StoreServer.conn())
 
-    GenServer.start_link(
-      __MODULE__,
-      %{
-        db_conn: db_conn,
-        llm_fn: llm_fn
-      },
-      name: name
-    )
+    state = %{
+      db_conn: db_conn,
+      llm_fn: Keyword.get(opts, :llm_fn, &default_llm_fn/1),
+      enabled: Keyword.get(opts, :enabled, Config.fetch(:summary_enabled)),
+      max_queue: Keyword.get(opts, :max_queue, 16)
+    }
+
+    GenServer.start_link(__MODULE__, state, name: name)
   end
 
   def summarize(server \\ __MODULE__, file, module_name, mtime, signatures) do
@@ -32,37 +33,35 @@ defmodule Dexterity.SummaryWorker do
 
   @impl true
   def handle_cast({:summarize, file, module_name, mtime, signatures}, state) do
-    # In a real app, this might check a local cache first, but we assume
-    # the caller checked the DB and realized it was missing or stale.
+    if state.enabled do
+      case Store.get_summary(state.db_conn, file, module_name) do
+        {:ok, {_, cached_mtime}} when cached_mtime >= mtime ->
+          :ok
 
-    prompt = """
-    System: You are a code documentation assistant.
-    User: Summarize this Elixir module in exactly one sentence under 80 characters.
-          Focus on what it does, not how.
-
-    #{signatures}
-    """
-
-    case state.llm_fn.(prompt) do
-      {:ok, summary} ->
-        now = System.os_time(:second)
-
-        sql = """
-        INSERT INTO semantic_summaries (file, module, summary, file_mtime, created_at)
-        VALUES (?1, ?2, ?3, ?4, ?5)
-        ON CONFLICT(file, module) DO UPDATE SET
-          summary = excluded.summary,
-          file_mtime = excluded.file_mtime,
-          created_at = excluded.created_at
-        """
-
-        Basic.exec(state.db_conn, sql, [file, module_name, summary, mtime, now])
-
-      _ ->
-        :ignore
+        _ ->
+          process_summary(state, file, module_name, mtime, signatures)
+      end
     end
 
     {:noreply, state}
+  end
+
+  defp process_summary(state, file, module_name, mtime, signatures) do
+    prompt =
+      """
+      Summarize this Elixir module in one short sentence (<=80 chars). Focus on
+      responsibility, not implementation details.
+
+      #{signatures}
+      """
+
+    case state.llm_fn.(prompt) do
+      {:ok, summary} ->
+        Store.upsert_summary(state.db_conn, file, module_name, summary, mtime, System.os_time(:second))
+
+      _ ->
+        :ok
+    end
   end
 
   defp default_llm_fn(_prompt) do

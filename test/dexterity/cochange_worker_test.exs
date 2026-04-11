@@ -1,58 +1,50 @@
 defmodule Dexterity.CochangeWorkerTest do
   use ExUnit.Case
+
   alias Dexterity.CochangeWorker
   alias Dexterity.Store
-  alias Exqlite.Basic
 
-  @db_path "test_cochange.db"
+  @db_path_template "test_cochange_worker_"
 
   setup do
-    File.rm(@db_path)
-    {:ok, conn} = Store.open(@db_path)
+    path = Path.join(System.tmp_dir!(), "#{@db_path_template}#{:erlang.unique_integer([:positive])}.db")
+    File.rm(path)
+    {:ok, conn} = Store.open(path)
+
+    mock_cmd = fn "git", _args, _opts ->
+      output = """
+      ---COMMIT---
+      lib/a.ex
+      lib/b.ex
+      README.md
+      ---COMMIT---
+      lib/a.ex
+      lib/b.ex
+      ---COMMIT---
+      lib/a.ex
+      lib/b.ex
+      """
+      {output, 0}
+    end
 
     on_exit(fn ->
       Store.close(conn)
-      File.rm(@db_path)
+      File.rm(path)
     end)
 
-    %{conn: conn}
+    %{conn: conn, cmd: mock_cmd}
   end
 
-  test "analyzes git log and upserts cochanges", %{conn: conn} do
-    mock_git_output = """
-    ---COMMIT---
-    lib/a.ex
-    lib/b.ex
-    README.md
-    ---COMMIT---
-    lib/a.ex
-    lib/b.ex
-    ---COMMIT---
-    lib/a.ex
-    lib/b.ex
-    """
+  test "analyzes git output and upserts normalized cochange edges", %{conn: conn, cmd: cmd} do
+    name = Module.concat(__MODULE__, :"CochangeWorker#{:erlang.unique_integer([:positive])}")
+    root = System.tmp_dir!()
 
-    mock_cmd = fn "git", _args, _opts ->
-      {mock_git_output, 0}
-    end
+    {:ok, pid} = start_supervised({CochangeWorker, repo_root: root, db_conn: conn, cmd_fn: cmd, enabled: true, interval_ms: 10_000, name: name})
+    send(pid, :analyze)
 
-    {:ok, pid} =
-      start_supervised({CochangeWorker, repo_root: ".", db_conn: conn, cmd_fn: mock_cmd})
+    Process.sleep(30)
 
-    # Wait for the initial analyze loop
-    :sys.get_state(pid)
-    # The analyze message is sent asynchronously, so wait a tiny bit
-    Process.sleep(50)
-
-    # Verify DB
-    {:ok, _query, result, _conn} =
-      Basic.exec(conn, "SELECT file_a, file_b, frequency FROM cochanges")
-
-    assert length(result.rows) == 1
-    [[file_a, file_b, freq]] = result.rows
-
-    assert file_a == "lib/a.ex"
-    assert file_b == "lib/b.ex"
-    assert freq == 3
+    {:ok, rows} = Store.list_cochanges(conn)
+    assert [{"lib/a.ex", "lib/b.ex", 3, _weight}] = rows
   end
 end

@@ -1,45 +1,54 @@
 defmodule Dexterity.Render do
   @moduledoc """
-  Handles token-bounded Markdown rendering of the context map.
+  Renders ranked file data into deterministic Markdown.
   """
-
   alias Dexterity.Tokenizer
 
-  @doc """
-  Renders ranked files, symbols, and summaries into a Markdown string
-  up to the provided token budget.
-  """
-  @spec render_files([{String.t(), float()}], map(), map(), map(), integer()) :: String.t()
+  @type file_block :: {String.t(), float()}
+
+  @spec render_files([file_block()], map(), map(), map(), integer()) :: String.t()
   def render_files(ranked_files, symbols, summaries, clones, budget) do
+    budget = max(budget, 1)
+
     {output, _} =
-      Enum.reduce_while(ranked_files, {"", 0}, fn {file, score}, {out, tokens} ->
-        block = render_file_block(file, score, symbols[file] || [], summaries[file], clones[file])
+      Enum.reduce_while(ranked_files, {"", 0}, fn {file, score}, {acc, used} ->
+        block = render_file(file, score, symbols[file] || [], summaries[file], clones[file])
         block_tokens = Tokenizer.count(block)
 
-        if tokens + block_tokens > budget do
-          {:halt, {out, tokens}}
+        if used + block_tokens > budget do
+          {:halt, {acc, used}}
         else
-          {:cont, {out <> block, tokens + block_tokens}}
+          {:cont, {acc <> block, used + block_tokens}}
         end
       end)
 
     output
   end
 
-  defp render_file_block(file, score, symbols, summary, clone_of) do
-    header = "### #{file}  [rank: #{Float.round(score, 4)}]\n"
+  defp render_file(file, score, symbols, summary, clone_of) do
+    base =
+      ["## #{file}", "- rank: #{Float.round(score, 6)}"]
+      |> Enum.join("\n")
 
-    if clone_of do
-      header <> "> [CLONE of #{clone_of}]\n\n"
-    else
-      summary_text = if summary, do: "> #{summary}\n", else: ""
+    injection =
+      if clone_of do
+        ["- [CLONE of #{clone_of}]"]
+      else
+        []
+      end
 
-      symbols_text =
-        Enum.map_join(symbols, "\n", fn sym ->
-          "  def #{sym.function}/#{sym.arity}"
-        end)
+    summary_text =
+      if summary do
+        ["- summary: #{summary}"]
+      else
+        []
+      end
 
-      header <> summary_text <> symbols_text <> "\n\n"
-    end
+    symbol_lines =
+      symbols
+      |> Enum.map(fn sym -> "- `#{sym.function}/#{sym.arity}` in `#{sym.module}`" end)
+
+    content = Enum.join([base, injection, summary_text, symbol_lines], "\n")
+    "\n#{content}\n"
   end
 end

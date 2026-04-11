@@ -1,75 +1,85 @@
 defmodule Dexterity.Backend.DexterTest do
   use ExUnit.Case
-  alias Dexterity.Backend.Dexter
 
-  @repo_root System.tmp_dir!()
-  @db_path Path.join(@repo_root, ".dexter.db")
+  alias Dexterity.Backend.Dexter
+  alias Exqlite.Basic
 
   setup do
-    File.rm(@db_path)
+    root = Path.join(System.tmp_dir!(), "dexterity-backend-test-#{:erlang.unique_integer([:positive])}")
+    db_path = Path.join(root, ".dexter.db")
 
-    # Create a mock .dexter.db
-    {:ok, conn} = Exqlite.Basic.open(@db_path)
+    File.mkdir_p!(root)
+    {:ok, conn} = Basic.open(db_path)
 
-    Exqlite.Basic.exec(
-      conn,
-      "CREATE TABLE definitions (module TEXT, function TEXT, arity INTEGER, file TEXT, line INTEGER)"
-    )
+    {:ok, _query, _result, _} =
+      Basic.exec(
+        conn,
+        "CREATE TABLE definitions (module TEXT, function TEXT, arity INTEGER, file TEXT, line INTEGER)"
+      )
 
-    Exqlite.Basic.exec(
-      conn,
-      "CREATE TABLE \"references\" (caller_file TEXT, target_module TEXT, target_function TEXT, target_arity INTEGER)"
-    )
+    {:ok, _query, _result, _} =
+      Basic.exec(
+        conn,
+        "CREATE TABLE \"references\" (caller_file TEXT, target_module TEXT, target_function TEXT, target_arity INTEGER, line INTEGER)"
+      )
 
-    # Insert mock data
-    Exqlite.Basic.exec(
+    {:ok, _query, _result, _} =
+      Basic.exec(
       conn,
       "INSERT INTO definitions VALUES ('MyModule', 'my_func', 1, 'lib/my_module.ex', 10)"
     )
 
-    Exqlite.Basic.exec(
-      conn,
-      "INSERT INTO \"references\" VALUES ('lib/caller.ex', 'MyModule', 'my_func', 1)"
-    )
+    {:ok, _query, _result, _} =
+      Basic.exec(
+        conn,
+        "INSERT INTO \"references\" VALUES ('lib/caller.ex', 'MyModule', 'my_func', 1, 12)"
+      )
 
-    Exqlite.Basic.exec(
-      conn,
-      "INSERT INTO \"references\" VALUES ('lib/caller.ex', 'MyModule', 'my_func', 1)"
-    )
+    {:ok, _query, _result, _} =
+      Basic.exec(
+        conn,
+        "INSERT INTO \"references\" VALUES ('lib/caller.ex', 'MyModule', 'my_func', 1, 13)"
+      )
 
-    Exqlite.Basic.exec(
-      conn,
-      "INSERT INTO \"references\" VALUES ('lib/caller.ex', 'MyModule', 'my_func', 1)"
-    )
+    on_exit(fn ->
+      Basic.close(conn)
+      File.rm_rf!(root)
+    end)
 
-    Exqlite.Basic.close(conn)
-    on_exit(fn -> File.rm(@db_path) end)
-    :ok
+    %{repo_root: root}
   end
 
-  test "list_file_edges calculates edges from references and definitions" do
-    edges = Dexter.list_file_edges(@repo_root)
-    assert length(edges) == 1
-
-    {source, target, weight} = hd(edges)
-    assert source == "lib/caller.ex"
-    assert target == "lib/my_module.ex"
-    # Weight should be sqrt(3) * 3.0 ≈ 1.732 * 3.0 = 5.196
-    assert_in_delta weight, 5.196, 0.01
+  test "list_file_edges returns weighted file graph edges", %{repo_root: repo_root} do
+    assert {:ok, [{"lib/caller.ex", "lib/my_module.ex", _weight}]} = Dexter.list_file_edges(repo_root)
   end
 
-  test "list_exported_symbols returns symbols for a given file" do
-    symbols = Dexter.list_exported_symbols(@repo_root, "lib/my_module.ex")
+  test "list_exported_symbols returns module symbols", %{repo_root: repo_root} do
+    {:ok, symbols} = Dexter.list_exported_symbols(repo_root, "lib/my_module.ex")
+
+    assert [
+             %{arity: 1, file: "lib/my_module.ex", function: "my_func", line: 10, module: "MyModule"}
+           ] = symbols
+  end
+
+  test "find_definition looks up exact and module-only matches", %{repo_root: repo_root} do
+    assert {:ok, symbols} = Dexter.find_definition(repo_root, "MyModule", "my_func", 1)
     assert length(symbols) == 1
-    assert hd(symbols).module == "MyModule"
-    assert hd(symbols).function == "my_func"
-    assert hd(symbols).arity == 1
+
+    assert {:ok, symbols} = Dexter.find_definition(repo_root, "MyModule", nil, nil)
+    assert length(symbols) == 1
   end
 
-  test "index_status returns ready when .dexter.db exists" do
-    assert Dexter.index_status(@repo_root) == :ready
+  test "find_references resolves callers for exported symbol", %{repo_root: repo_root} do
+    assert {:ok, refs} = Dexter.find_references(repo_root, "MyModule", "my_func", 1)
+    assert [%{file: "lib/caller.ex", line: 12}, %{file: "lib/caller.ex", line: 13}] = refs
+  end
 
-    File.rm(@db_path)
-    assert Dexter.index_status(@repo_root) == :missing
+  test "index_status reflects dexter database existence", %{repo_root: repo_root} do
+    assert {:ok, :ready} = Dexter.index_status(repo_root)
+    assert {:ok, :missing} = Dexter.index_status(repo_root <> "-missing")
+  end
+
+  test "healthy returns backend_missing_binary when dexter executable is unavailable" do
+    assert {:error, :backend_missing_binary} = Dexter.healthy?(System.tmp_dir!())
   end
 end

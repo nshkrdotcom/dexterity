@@ -1,44 +1,40 @@
 defmodule Dexterity.SummaryWorkerTest do
   use ExUnit.Case
-  alias Dexterity.Store
-  alias Dexterity.SummaryWorker
-  alias Exqlite.Basic
 
-  @db_path "test_summary.db"
+  alias Dexterity.SummaryWorker
+  alias Dexterity.Store
 
   setup do
-    File.rm(@db_path)
-    {:ok, conn} = Store.open(@db_path)
+    path = Path.join(System.tmp_dir!(), "test_summary_worker_#{:erlang.unique_integer([:positive])}.db")
+    {:ok, conn} = Store.open(path)
+
+    mock_llm = fn _prompt -> {:ok, "Mock summary under 80 chars."} end
+    name = Module.concat(__MODULE__, :"SummaryWorker#{:erlang.unique_integer([:positive])}")
 
     on_exit(fn ->
       Store.close(conn)
-      File.rm(@db_path)
+      File.rm(path)
     end)
 
-    %{conn: conn}
+    %{conn: conn, name: name, mock_llm: mock_llm}
   end
 
-  test "fetches and caches summary", %{conn: conn} do
-    mock_llm = fn _prompt -> {:ok, "Mock summary under 80 chars."} end
-
+  test "summarizes and caches semantic text", %{conn: conn, name: name, mock_llm: mock_llm} do
     {:ok, pid} =
       start_supervised(
         {SummaryWorker,
-         db_conn: conn, llm_fn: mock_llm}
+         [
+           db_conn: conn,
+           llm_fn: mock_llm,
+           enabled: true,
+           name: name
+         ]}
       )
 
     SummaryWorker.summarize(pid, "lib/my_module.ex", "MyModule", 12_345, "def my_func()")
+    Process.sleep(20)
 
-    # Wait for cast to be processed
-    :sys.get_state(pid)
-
-    {:ok, _query, result, _conn} =
-      Basic.exec(conn, "SELECT summary, file_mtime FROM semantic_summaries")
-
-    assert length(result.rows) == 1
-
-    [[summary, mtime]] = result.rows
-    assert summary == "Mock summary under 80 chars."
-    assert mtime == 12_345
+    assert {:ok, result} = Store.get_summary(conn, "lib/my_module.ex", "MyModule")
+    assert {"Mock summary under 80 chars.", 12_345} = result
   end
 end
