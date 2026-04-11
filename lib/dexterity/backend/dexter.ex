@@ -51,7 +51,7 @@ defmodule Dexterity.Backend.Dexter do
   @impl Dexterity.Backend
   def list_file_edges(repo_root) do
     with {:ok, conn} <- open_db(repo_root),
-         {:ok, _query, result, _conn} <- Basic.exec(conn, @file_edges_sql),
+         {:ok, _query, result, _conn} <- exec_query(conn, @file_edges_sql),
          :ok <- close(conn) do
       edges =
         for [source, target, ref_count] <- result.rows,
@@ -61,9 +61,6 @@ defmodule Dexterity.Backend.Dexter do
 
       {:ok, edges}
     else
-      {:error, {:exqlite_error, %Exqlite.Error{} = error}} ->
-        {:error, {:backend_query_failed, error.message}}
-
       {:error, reason} ->
         {:error, {:backend_query_failed, reason}}
     end
@@ -72,7 +69,7 @@ defmodule Dexterity.Backend.Dexter do
   @impl Dexterity.Backend
   def list_file_nodes(repo_root) do
     with {:ok, conn} <- open_db(repo_root),
-         {:ok, _query, result, _conn} <- Basic.exec(conn, @file_nodes_sql),
+         {:ok, _query, result, _conn} <- exec_query(conn, @file_nodes_sql),
          :ok <- close(conn) do
       nodes =
         Enum.map(result.rows, fn [file] ->
@@ -81,9 +78,6 @@ defmodule Dexterity.Backend.Dexter do
 
       {:ok, nodes}
     else
-      {:error, {:exqlite_error, %Exqlite.Error{} = error}} ->
-        {:error, {:backend_query_failed, error.message}}
-
       {:error, reason} ->
         {:error, {:backend_query_failed, reason}}
     end
@@ -92,14 +86,11 @@ defmodule Dexterity.Backend.Dexter do
   @impl Dexterity.Backend
   def list_exported_symbols(repo_root, file) do
     with {:ok, conn} <- open_db(repo_root),
-         {:ok, _query, result, _conn} <- Basic.exec(conn, @exported_sql, [file]),
+         {:ok, _query, result, _conn} <- exec_query(conn, @exported_sql, [file]),
          :ok <- close(conn) do
       symbols = Enum.map(result.rows, &row_to_symbol/1)
       {:ok, symbols}
     else
-      {:error, {:exqlite_error, %Exqlite.Error{} = error}} ->
-        {:error, {:backend_query_failed, error.message}}
-
       {:error, reason} ->
         {:error, {:backend_query_failed, reason}}
     end
@@ -124,7 +115,7 @@ defmodule Dexterity.Backend.Dexter do
     sql = "#{@find_definition_sql} #{where} ORDER BY file ASC, line ASC"
 
     with {:ok, conn} <- open_db(repo_root),
-         {:ok, _query, result, _conn} <- Basic.exec(conn, sql, params),
+         {:ok, _query, result, _conn} <- exec_query(conn, sql, params),
          :ok <- close(conn) do
       symbols = Enum.map(result.rows, &row_to_symbol/1)
 
@@ -134,9 +125,6 @@ defmodule Dexterity.Backend.Dexter do
         {:ok, symbols}
       end
     else
-      {:error, {:exqlite_error, %Exqlite.Error{} = error}} ->
-        {:error, {:backend_query_failed, error.message}}
-
       {:error, reason} ->
         {:error, {:backend_query_failed, reason}}
     end
@@ -161,7 +149,7 @@ defmodule Dexterity.Backend.Dexter do
     sql = "#{@find_references_sql} #{where} ORDER BY caller_file ASC, line ASC"
 
     with {:ok, conn} <- open_db(repo_root),
-         {:ok, _query, result, _conn} <- Basic.exec(conn, sql, params),
+         {:ok, _query, result, _conn} <- exec_query(conn, sql, params),
          :ok <- close(conn) do
       refs =
         Enum.map(result.rows, fn [caller_file, line] ->
@@ -170,9 +158,6 @@ defmodule Dexterity.Backend.Dexter do
 
       {:ok, refs}
     else
-      {:error, {:exqlite_error, %Exqlite.Error{} = error}} ->
-        {:error, {:backend_query_failed, error.message}}
-
       {:error, reason} ->
         {:error, {:backend_query_failed, reason}}
     end
@@ -250,6 +235,22 @@ defmodule Dexterity.Backend.Dexter do
       error ->
         {:error, {:command_failed, Exception.message(error)}}
   end
+
+  defp exec_query(conn, sql) do
+    exec_query(conn, sql, [])
+  end
+
+  defp exec_query(conn, sql, params) do
+    case Basic.exec(conn, sql, params) do
+      {:ok, _query, _result, _conn} = ok ->
+        ok
+
+      {:error, reason, _conn} ->
+        {:error, normalize_error(reason)}
+    end
+  end
+
+  defp normalize_error(%Exqlite.Error{} = error), do: error.message
 
   defp row_to_symbol([module_name, function_name, arity, file, line]) do
     %{

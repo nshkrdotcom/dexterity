@@ -11,9 +11,9 @@
 ## In-progress
 
 - Full spec conformance for public API shapes.
-- Graph enrichment (`use`, protocol/behaviour edges, deterministic clone logic).
-- Summary provider contracts and cache policies.
-- Complete Mix tasks and MCP tools.
+- Summary worker hardening and bounded queue/retry policy (completed).
+- Deterministic clone/use/protocol metadata rendering.
+- Release hygiene and long-term operational controls.
 
 # Not done yet
 

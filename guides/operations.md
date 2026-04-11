@@ -1,33 +1,52 @@
 # Operations Guide
 
-## Running and observability
+## Operational checks
 
-- `Dexterity.status/0` should be the first check on runtime health:
-  - backend status
-  - database path
-  - graph stale state
-  - node count
-- Use structured logs for graph stale rebuilds and worker failures.
+Run this sequence before major handoffs:
 
-## Failure modes
+1. `mix test`
+2. `mix compile`
+3. `mix credo`
+4. `mix dialyzer`
+5. `mix dexterity.status`
+6. `mix dexterity.map --repo-root . --limit 5`
+
+## Runtime behavior
+
+- `Dexterity.status/0` is the root health signal:
+  - backend readiness/health
+  - index path
+  - stale graph state
+  - number of nodes in the graph map
+- Graph rebuild is lazy: stale graphs refresh on first call that needs ranking.
+- File changes are queued by `FileWatcher` and may debounce depending on timer config.
+- Co-change updates happen on schedule and are non-blocking to map rendering.
+
+## Failure modes and recovery
 
 - Missing `.dexter.db`:
-  - index should be treated as missing, not silent.
-- Stale graph state:
-  - rebuild on next request path and cache new ranking.
-- Summary worker failures:
-  - do not block ranking.
+  - status reports index as `:missing`
+  - run `mix dexterity.index --repo-root .` and rerun status
+- Stale graph:
+  - first ranking call after staleness rebuilds; no partial ranking result is returned
 - Backend command failure:
-  - explicit error return and no guessed result.
+  - explicit error tuple is returned; no fallback synthesis
+- MCP malformed payload:
+  - server returns JSON-RPC error object; process remains alive
+- Summary queue saturation:
+  - bounded queue policy drops oldest request when full
 
-## Recommended cleanup
+## Observability
 
-- Untracked or generated artifacts:
+- Log and inspect:
+  - graph stale/refresh transitions
+  - indexer bootstrap errors
+  - co-change worker errors and retry paths
+  - MCP validation failures
+
+## Repository hygiene
+
+- Remove ephemeral artifacts before release checkpoints:
   - `test.db`
   - `test_db.exs`
-  - `.dexterity/` during tests
-- Remove these before release checkpoints and release handoff.
-
-## Upgrade posture
-
-- Keep implementation cleanly separated per module so backend and ranking policy changes can be landed incrementally.
+  - `.dexterity/` (test workspace only)

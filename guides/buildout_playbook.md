@@ -1,32 +1,33 @@
 # Buildout Playbook
 
-## TDD + RGR Rules
+## Required development model
 
-1. Add failing test first.
-2. Make minimal change to pass.
-3. Refactor while preserving green.
-4. Expand tests before expanding behavior.
+- Read and keep this flow:
+  - `codex-spark/README.md`
+  - `codex-spark/implementation_reading_and_context.md`
+  - `codex-spark/implementation_plan_tdd_rgr.md`
+  - `codex-spark/full_execution_checklist.md`
+  - `codex-spark/recontextualization_instructions.md`
+- Always add one failing test first.
+- Green implementation, then refactor.
+- Run all quality gates before every phase handoff.
 
-## Phase-by-phase execution
+## Quality gates
 
-1. API contract completion
-2. Backend hardening
-3. Store and lifecycle
-4. Graph intelligence
-5. Render + summaries
-6. Mix + MCP
-7. Performance and hardening
+- `mix test`
+- `mix compile`
+- `mix credo`
+- `mix dialyzer`
 
-## Re-entry protocol
+## Build phases
 
-- Re-open `codex-spark/` packet before resuming implementation.
-- Confirm checklist states are true before each phase.
-- Never continue without running at least local `mix test`.
+- Stabilize API/query behavior and error contracts.
+- Complete mix task and MCP transport behaviors.
+- Add summary/metadata hardening and queue policy.
+- Improve graph enrichment + clone/use protocol rendering.
+- Final acceptance and release hygiene.
 
-## Compaction handling
+## Compaction rule
 
-- After each major context switch, re-read:
-  - `as_built_assessment.md`
-  - `full_execution_checklist.md`
-  - `implementation_plan_tdd_rgr.md`
-- Keep decisions logged; never re-derive unresolved design choices without tests.
+- Re-open checklist immediately after any context switch.
+- Update `as_built_assessment.md`, `implementation_plan_tdd_rgr.md`, and `full_execution_checklist.md` before next behavior change.

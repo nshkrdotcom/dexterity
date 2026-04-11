@@ -5,7 +5,7 @@ defmodule Dexterity.Graph do
 
   alias Dexterity.GraphServer
 
-  @spec get_adjacency(keyword()) :: %{String.t() => %{String.t() => float()}} | {:error, term()}
+  @spec get_adjacency(keyword()) :: {:ok, %{String.t() => %{String.t() => float()}}} | {:error, term()}
   def get_adjacency(opts \\ []) do
     server = Keyword.get(opts, :server, GraphServer)
     {:ok, GraphServer.get_adjacency(server)}

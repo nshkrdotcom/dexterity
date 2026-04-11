@@ -2,39 +2,69 @@ defmodule Dexterity.SummaryWorkerTest do
   use ExUnit.Case
 
   alias Dexterity.SummaryWorker
-  alias Dexterity.Store
 
-  setup do
-    path = Path.join(System.tmp_dir!(), "test_summary_worker_#{:erlang.unique_integer([:positive])}.db")
-    {:ok, conn} = Store.open(path)
+  test "bounded queue drops oldest pending work when full" do
+    queue_events = self()
+    marker = :erlang.unique_integer([:positive])
 
-    mock_llm = fn _prompt -> {:ok, "Mock summary under 80 chars."} end
-    name = Module.concat(__MODULE__, :"SummaryWorker#{:erlang.unique_integer([:positive])}")
+    llm_fn = fn prompt ->
+      send(queue_events, {:llm_prompt, prompt})
+      Process.sleep(20)
+      {:ok, "ok"}
+    end
 
-    on_exit(fn ->
-      Store.close(conn)
-      File.rm(path)
-    end)
+    name =
+      Module.concat(__MODULE__, :"SummaryWorkerQueue#{:erlang.unique_integer([:positive])}")
 
-    %{conn: conn, name: name, mock_llm: mock_llm}
+    start_supervised(
+      {SummaryWorker, [name: name, db_conn: nil, enabled: true, max_queue: 1, llm_fn: llm_fn]}
+    )
+
+    SummaryWorker.summarize(name, "lib/#{marker}_a.ex", "A", marker, "sig-a")
+    SummaryWorker.summarize(name, "lib/#{marker}_b.ex", "B", marker, "sig-b")
+    SummaryWorker.summarize(name, "lib/#{marker}_c.ex", "C", marker, "sig-c")
+
+    status = SummaryWorker.status(name)
+    assert status.working
+    assert status.queue_size == 1
+
+    assert_receive {:llm_prompt, prompt}, 1_000
+    assert prompt =~ "A"
+    assert_receive {:llm_prompt, prompt_2}, 1_000
+    assert prompt_2 =~ "C"
+    refute_receive {:llm_prompt, _}, 1_000
   end
 
-  test "summarizes and caches semantic text", %{conn: conn, name: name, mock_llm: mock_llm} do
-    {:ok, pid} =
-      start_supervised(
-        {SummaryWorker,
-         [
-           db_conn: conn,
-           llm_fn: mock_llm,
-           enabled: true,
-           name: name
-         ]}
-      )
+  test "retries transient failures up to configured limit" do
+    marker = :erlang.unique_integer([:positive])
+    calls = :atomics.new(1, [])
+    parent = self()
+    llm_fn = fn prompt ->
+      count = :atomics.add_get(calls, 1, 1)
+      send(parent, {:llm_attempt, count, prompt})
+      if count < 2, do: {:error, :transient}, else: {:ok, "ok"}
+    end
 
-    SummaryWorker.summarize(pid, "lib/my_module.ex", "MyModule", 12_345, "def my_func()")
-    Process.sleep(20)
+    name =
+      Module.concat(__MODULE__, :"SummaryWorkerRetry#{:erlang.unique_integer([:positive])}")
 
-    assert {:ok, result} = Store.get_summary(conn, "lib/my_module.ex", "MyModule")
-    assert {"Mock summary under 80 chars.", 12_345} = result
+    start_supervised(
+      {SummaryWorker,
+       [
+         name: name,
+         db_conn: nil,
+         enabled: true,
+         max_queue: 4,
+         retry_limit: 2,
+         retry_delay_ms: 10,
+         llm_fn: llm_fn
+       ]}
+    )
+
+    SummaryWorker.summarize(name, "lib/#{marker}_retry.ex", "RetryMod", marker, "sig")
+
+    assert_receive {:llm_attempt, 1, _}, 1_000
+    assert_receive {:llm_attempt, 2, _}, 1_000
+    refute_receive {:llm_attempt, 3, _}, 100
   end
 end

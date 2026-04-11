@@ -5,8 +5,8 @@ defmodule Dexterity.GraphServer do
 
   use GenServer
 
-  alias Dexterity.StoreServer
   alias Dexterity.Config
+  alias Dexterity.StoreServer
   alias Dexterity.PageRank
   alias Dexterity.Store
 
@@ -85,7 +85,11 @@ defmodule Dexterity.GraphServer do
   defp init_state(opts) do
     repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
     backend = Keyword.get(opts, :backend, Config.fetch(:backend))
-    store_conn = Keyword.get(opts, :store_conn, StoreServer.conn())
+    store_conn =
+      case Keyword.fetch(opts, :store_conn) do
+        {:ok, value} -> value
+        :error -> StoreServer.conn()
+      end
 
     %{
       repo_root: repo_root,
@@ -100,8 +104,9 @@ defmodule Dexterity.GraphServer do
 
   defp compute_scores(state, context_files, opts) do
     context = normalize_context_files(context_files)
+    all_files = Enum.uniq(context ++ state.all_files)
     config_context = Keyword.get(opts, :limit, nil)
-    scores = PageRank.compute(state.graph, context, state.all_files)
+    scores = PageRank.compute(state.graph, context, all_files)
 
     scores
     |> sort_scores()
@@ -125,9 +130,10 @@ defmodule Dexterity.GraphServer do
   defp rebuild_graph(state) do
     edges = fetch_file_edges(state)
     cochange_edges = fetch_cochange_edges(state)
+    file_nodes = fetch_file_nodes(state)
 
     merged = merge_edges(edges, cochange_edges)
-    all_files = collect_files(merged, edges)
+    all_files = collect_files(merged, file_nodes)
 
     sorted_all = Enum.sort(all_files)
     baseline = PageRank.compute(merged, [], sorted_all)
@@ -139,6 +145,13 @@ defmodule Dexterity.GraphServer do
   defp fetch_file_edges(state) do
     case state.backend.list_file_edges(state.repo_root) do
       {:ok, edges} -> edges
+      _ -> []
+    end
+  end
+
+  defp fetch_file_nodes(state) do
+    case state.backend.list_file_nodes(state.repo_root) do
+      {:ok, nodes} -> nodes
       _ -> []
     end
   end
@@ -156,12 +169,22 @@ defmodule Dexterity.GraphServer do
     end
   end
 
-  defp collect_files(graph, edges) do
+  defp collect_files(graph, file_nodes) do
     nodes =
-      edges
-      |> Enum.flat_map(fn {source, target, _weight} -> [source, target] end)
-      |> Enum.concat(Map.keys(graph))
-      |> Enum.reduce(MapSet.new(), fn file, acc -> MapSet.put(acc, file) end)
+      graph
+      |> Enum.reduce(MapSet.new(file_nodes), fn {source, targets}, acc ->
+        target_nodes =
+          targets
+          |> Map.keys()
+
+        Enum.reduce(
+          target_nodes,
+          MapSet.put(acc, source),
+          fn target, node_set ->
+            MapSet.put(node_set, target)
+          end
+        )
+      end)
 
     MapSet.to_list(nodes)
   end

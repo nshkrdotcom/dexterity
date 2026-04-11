@@ -14,7 +14,11 @@ defmodule Dexterity.CochangeWorker do
   def start_link(opts) do
     name = Keyword.get(opts, :name, __MODULE__)
     repo_root = Keyword.fetch!(opts, :repo_root)
-    db_conn = Keyword.get(opts, :db_conn, StoreServer.conn())
+    db_conn =
+      case Keyword.fetch(opts, :db_conn) do
+        {:ok, value} -> value
+        :error -> StoreServer.conn()
+      end
 
     state = %{
       repo_root: repo_root,

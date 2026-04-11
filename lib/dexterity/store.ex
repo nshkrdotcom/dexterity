@@ -21,7 +21,6 @@ defmodule Dexterity.Store do
       {:ok, conn}
     else
       {:error, reason} -> {:error, reason}
-      reason -> {:error, reason}
     end
   end
 
@@ -158,13 +157,16 @@ defmodule Dexterity.Store do
       case acc do
         :ok ->
           case exec(conn, sql, []) do
-            {:ok, _query, _result, _conn} -> {:cont, :ok}
-            {:error, reason} -> {:halt, {:error, reason}}
+            {:ok, _query, _result, _conn} ->
+              {:cont, :ok}
+
+            {:error, reason} ->
+              {:halt, {:error, reason}}
           end
 
-        _ ->
+        {:error, _reason} ->
           {:halt, acc}
-      end
+        end
     end)
   end
 
@@ -249,17 +251,11 @@ defmodule Dexterity.Store do
       case acc do
         :ok ->
           case exec(conn, sql, []) do
-            {:ok, _query, %Exqlite.Result{}, _conn} ->
-              {:cont, :ok}
-
             {:ok, _query, _result, _conn} ->
               {:cont, :ok}
 
             {:error, reason} ->
               {:halt, {:error, reason}}
-
-            other ->
-              {:halt, {:error, {:unexpected_exec_result, other}}}
           end
 
         _ ->
@@ -275,13 +271,16 @@ defmodule Dexterity.Store do
   end
 
   defp exec(conn, sql, params) do
-    try do
-      Basic.exec(conn, sql, params)
-    rescue
-      e ->
-        {:error, {:exqlite_error, e}}
+    case Basic.exec(conn, sql, params) do
+      {:ok, query, result, conn_state} ->
+        {:ok, query, result, conn_state}
+
+      {:error, reason, _conn} ->
+        {:error, normalize_error(reason)}
     end
   end
+
+  defp normalize_error(%Exqlite.Error{} = error), do: error.message
 
   defp exec!(conn, sql, params) do
     case exec(conn, sql, params) do

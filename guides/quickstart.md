@@ -1,33 +1,44 @@
 # Quick Start
 
-## Installation
+## Install
 
-Add the package in your project `mix.exs`:
+Add the dependency to your host project:
 
 ```elixir
-defp deps do
+def deps do
   [
     {:dexterity, "~> 0.1.0"}
   ]
 end
 ```
 
-## Minimum runtime
+## Minimum local runtime
 
-1. Ensure `dexter` binary is on `PATH` or set `dexter_bin`.
-2. Ensure `.dexter.db` exists (or allow `dexterity.index` task to build it).
-3. Start the app so OTP supervision is active.
+1. Ensure `dexter` CLI is installed and accessible on `PATH`, or set `:dexter_bin`.
+2. Ensure the index exists:
+   - `mix dexterity.index --repo-root PATH`
+3. Start OTP runtime in development (for API usage) or call functions from tests with temporary config.
 
-## Basic usage
+## Standard flow
 
 ```elixir
-{:ok, map} = Dexterity.get_repo_map(active_file: "lib/my_app.ex", token_budget: 2048)
-{:ok, ranked} = Dexterity.get_ranked_files(limit: 20)
-{:ok, refs} = Dexterity.Query.find_references("MyApp.Accounts", "register", 2)
+# Build the map for one request
+{:ok, map} = Dexterity.get_repo_map(active_file: "lib/my_app.ex", token_budget: 2048, limit: 20)
+{:ok, ranked} = Dexterity.get_ranked_files(limit: 20, repo_root: ".", backend: Dexterity.Backend.Dexter)
+{:ok, refs} = Dexterity.Query.find_references("MyApp.Accounts", "register", 2, backend: Dexterity.Backend.Dexter)
 ```
 
-## Notes
+## Mix task usage
 
-- No silent fallback for core failures.
-- Missing dexter index should flow through status/error semantics, not guesswork.
-- Token budget is capped: results always respect configured limit.
+```bash
+mix dexterity.index --repo-root .
+mix dexterity.status --repo-root .
+mix dexterity.map --active-file lib/my_app.ex --limit 20 --token-budget 2048
+mix dexterity.query references MyApp.Accounts register 2
+```
+
+## Error handling posture
+
+- No silent fallbacks for required data.
+- Missing index and degraded backends must return explicit tuples.
+- Ranking and rendering are deterministic for fixed inputs.

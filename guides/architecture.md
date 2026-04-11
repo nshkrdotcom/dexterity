@@ -1,30 +1,34 @@
-# Architecture Guide
+# Architecture
 
-## Data flow
+## Runtime architecture
 
-1. `Indexer` ensures Dexter index state at startup and on schedule.
-2. `GraphServer` fetches:
-   - base file edges from `Backend` (`dexter.definitions`, `dexter.references`)
-   - co-change edges from `Store`
-3. Edges merge and normalize into adjacency map.
-4. PageRank computes baseline and contextual scores.
-5. `get_repo_map` fetches ranked symbols and optional summaries, then renders Markdown output.
+- `Dexterity.Application` starts OTP supervision:
+  - `StoreServer` for metadata DB lifecycle.
+  - `IndexSupervisor` with `Indexer` + `FileWatcher`.
+  - `GraphServer` for graph/rank state.
+  - `CochangeWorker` for temporal coupling.
+  - `SummaryWorker` for optional summary cache updates.
 
-## OTP structure
+## Data and control path
 
-- `Dexterity.Application` supervises core servers:
-  - `StoreServer`
-  - `IndexSupervisor` (`Indexer`, `FileWatcher`)
-  - `GraphServer`
-  - `CochangeWorker`
-  - `SummaryWorker`
+1. Backend reads `.dexter.db` for semantic edges and symbol exports.
+2. `GraphServer` builds a ranked adjacency map:
+   - base edges from backend
+   - temporal edges from `Store`
+3. Context inputs (`active_file`, `mentioned_files`, `edited_files`) are applied as query context.
+4. `Dexterity` fetches symbols and summaries and renders deterministic map text.
+5. Mix tasks and MCP call the same public API modules.
 
-## Determinism controls
+## Build boundaries
 
-- Graph rebuild is lazy and controlled via stale marker.
-- Ranking is pure and deterministic for fixed graph + context.
-- Tokenized output is assembled in deterministic order.
+- Backends are injected via `Dexterity.Backend` callbacks.
+- Graph rebuild is lazy and triggered when stale state is detected.
+- Metadata persistence happens in local SQLite metadata store (`Store`).
+- MCP runs as an explicit transport layer over the same public functions.
 
-## Out-of-scope in current baseline
+## Stability points
 
-- MCP task wiring and full mix task surface are planned, not fully delivered yet.
+- Backend missing DB returns explicit status values.
+- Missing graph state does not produce guessed output.
+- Ranking and renderer operate in deterministic order.
+- Summary worker failures do not block ranking reads.

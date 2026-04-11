@@ -19,6 +19,15 @@ defmodule Dexterity do
           repo_root: String.t()
         ]
 
+  @type status_snapshot :: %{
+          backend: String.t(),
+          dexter_db: String.t(),
+          index_status: atom(),
+          backend_healthy: boolean(),
+          graph_stale: boolean(),
+          files: non_neg_integer()
+        }
+
   @doc """
   Returns ranked and rendered repository context.
   """
@@ -66,17 +75,27 @@ defmodule Dexterity do
   @spec get_module_deps(String.t(), keyword()) ::
           {:ok, %{dependencies: [String.t()], dependents: [String.t()]}} | {:error, term()}
   def get_module_deps(file, opts \\ []) do
-    graph = Keyword.get(opts, :graph, GraphServer.get_adjacency(GraphServer))
-    outgoing = Map.get(graph, file, %{}) |> Map.keys() |> Enum.uniq() |> Enum.sort()
+    case fetch_graph(opts) do
+      {:ok, graph} ->
+        outgoing =
+          graph
+          |> Map.get(file, %{})
+          |> Map.keys()
+          |> Enum.uniq()
+          |> Enum.sort()
 
-    incoming =
-      graph
-      |> Enum.filter(fn {_from, out} -> Map.has_key?(out, file) end)
-      |> Enum.map(fn {from, _} -> from end)
-      |> Enum.uniq()
-      |> Enum.sort()
+        incoming =
+          graph
+          |> Enum.filter(fn {_from, out} -> Map.has_key?(out, file) end)
+          |> Enum.map(fn {from, _} -> from end)
+          |> Enum.uniq()
+          |> Enum.sort()
 
-    {:ok, %{dependencies: outgoing, dependents: incoming}}
+        {:ok, %{dependencies: outgoing, dependents: incoming}}
+
+      {:error, _reason} ->
+        {:error, :graph_unavailable}
+    end
   end
 
   @doc """
@@ -111,31 +130,88 @@ defmodule Dexterity do
   @doc """
   Returns a status snapshot for caller diagnostics.
   """
-  @spec status() :: {:ok, map()} | {:error, term()}
+  @spec status() :: {:ok, status_snapshot()} | {:error, term()}
   def status do
     backend = Config.fetch(:backend)
     repo_root = Config.repo_root()
-    graph = GraphServer.get_adjacency(GraphServer)
 
-    with {:ok, index_status} <- backend.index_status(repo_root),
-         {:ok, backend_healthy} <- backend.healthy?(repo_root) do
-      {:ok,
-       %{
-         backend: inspect(backend),
-         dexter_db: Path.join(repo_root, Config.fetch(:dexter_db)),
-         index_status: index_status,
-         backend_healthy: backend_healthy,
-         graph_stale: state_stale?(),
-         files: map_size(graph)
-       }}
+    graph =
+      try do
+        GraphServer.get_adjacency(GraphServer)
+      rescue
+        _ -> %{}
+      end
+
+    files = map_size(graph)
+
+      case backend.index_status(repo_root) do
+        {:ok, index_status} when index_status in [:ready, :stale, :missing, :error] ->
+        case backend.healthy?(repo_root) do
+          {:ok, backend_healthy} when is_boolean(backend_healthy) ->
+            {:ok,
+             %{
+               backend: inspect(backend),
+               dexter_db: Path.join(repo_root, Config.fetch(:dexter_db)),
+               index_status: index_status,
+               backend_healthy: backend_healthy,
+               graph_stale: state_stale?(),
+               files: files
+             }}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+
+      _ ->
+        {:error, :status_unavailable}
+    end
+  end
+
+  defp fetch_graph(opts) do
+    case Keyword.get(opts, :graph) do
+      nil ->
+        {:ok, GraphServer.get_adjacency(GraphServer)}
+
+      graph when is_map(graph) ->
+        {:ok, graph}
+
+      graph when is_atom(graph) and graph != nil ->
+        case pid_for(graph) do
+          {:ok, pid} -> {:ok, GraphServer.get_adjacency(pid)}
+          _ -> {:error, :graph_unavailable}
+        end
+
+      graph when is_pid(graph) ->
+        {:ok, GraphServer.get_adjacency(graph)}
+
+      _ ->
+        {:error, :invalid_graph_source}
     end
   end
 
   defp state_stale? do
-    try do
-      :sys.get_state(GraphServer).stale
-    rescue
-      _ -> true
+    case Process.whereis(GraphServer) do
+      nil ->
+        true
+
+      pid ->
+        case :sys.get_state(pid) do
+          %{stale: stale} when is_boolean(stale) ->
+            stale
+
+          _ ->
+            true
+        end
+    end
+  end
+
+  defp pid_for(graph) do
+    case Process.whereis(graph) do
+      nil -> {:error, :not_running}
+      pid -> {:ok, pid}
     end
   end
 

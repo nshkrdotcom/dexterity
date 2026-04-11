@@ -48,6 +48,7 @@ defmodule Dexterity.MixProject do
       {:nx, "~> 0.9", optional: true},
       {:tiktoken, "~> 0.4", optional: true},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
+      {:jason, "~> 1.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
@@ -71,6 +72,8 @@ defmodule Dexterity.MixProject do
         "guides/architecture.md": [title: "Architecture"],
         "guides/api_reference.md": [title: "API Reference"],
         "guides/configuration.md": [title: "Configuration"],
+        "guides/mcp.md": [title: "MCP Server"],
+        "guides/mix_tasks.md": [title: "Mix Tasks"],
         "guides/testing_and_quality.md": [title: "Testing + Quality"],
         "guides/operations.md": [title: "Operations"],
         "guides/buildout_playbook.md": [title: "Buildout Playbook"],

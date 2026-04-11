@@ -7,24 +7,31 @@
 - `mix credo`
 - `mix dialyzer`
 
-All three are required before any phase handoff.
+All four are required before phase transition.
 
 ## Test strategy
 
 - Unit-first for each facade (`Dexterity`, `Backend`, `Graph`, `Store`, workers).
-- Property-style checks where deterministic ranking or dedupe is involved.
-- Negative-path tests for all backend and storage failures.
-- Integration checks using temporary scratch DBs and temporary repos.
+- Negative-path tests for every API contract and CLI arg parse branch.
+- Integration checks using temporary repos, temp DBs, and temporary worker state.
+- Deterministic assertions for ranking and traversal order.
+- Stability checks for queue/retry and malformed MCP payload handling.
 
 ## Current baseline
 
-- `mix test`: 26 passing at last snapshot.
-- `mix compile`: passing.
-- `mix credo`: passing.
-- `mix dialyzer`: not yet clean (14 contract issues).
+- `mix test`: 38 passing
+- `mix compile`: passing
+- `mix credo`: passing
+- `mix dialyzer`: passing
 
 ## Acceptance gate targets
 
-- 100% required checks are green.
-- No temporary artifacts tracked in git for release-ready handoff.
-- Checklists updated and as-built assessment refreshed at each phase boundary.
+- 100% required checks must pass before merge.
+- No ephemeral DB artifacts in release handoff.
+- Guide and packet checklists remain updated after every compaction.
+
+## Required quality tags for this branch
+
+- New behavior must include at least one failing test first.
+- Any non-trivial behavior change requires one regression test after refactor.
+- No API behavior changes without protocol-level docs updated in `guides/`.

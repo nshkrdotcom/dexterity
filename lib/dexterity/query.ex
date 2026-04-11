@@ -15,7 +15,7 @@ defmodule Dexterity.Query do
 
   @type blast_result :: %{source: String.t(), depth: non_neg_integer()}
 
-  @spec find_definition(String.t(), String.t(), String.t() | nil, non_neg_integer() | nil) ::
+  @spec find_definition(String.t(), String.t(), String.t() | nil, keyword()) ::
           {:ok, [Backend.symbol()]} | {:error, term()}
   def find_definition(module, function_name, arity, opts \\ []) do
     repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
@@ -29,6 +29,26 @@ defmodule Dexterity.Query do
     repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
     backend = Keyword.get(opts, :backend, Config.fetch(:backend))
     backend.find_references(repo_root, module, function_name, arity)
+  end
+
+  @spec cochanges(String.t(), non_neg_integer(), keyword()) ::
+          {:ok, [{String.t(), float()}]} | {:error, term()}
+  def cochanges(file, limit \\ 10, opts \\ []) do
+    server = Keyword.get(opts, :graph_server, GraphServer)
+
+    try do
+      adjacency = GraphServer.get_adjacency(server)
+      cochanges = Map.get(adjacency, file, %{}) |> Map.to_list()
+      results =
+        cochanges
+        |> Enum.sort_by(fn {_neighbor, weight} -> -weight end)
+        |> Enum.take(limit)
+        |> Enum.map(fn {neighbor, weight} -> {neighbor, weight} end)
+
+      {:ok, results}
+    rescue
+      _ -> {:error, :graph_unavailable}
+    end
   end
 
   @spec blast_radius(String.t(), keyword()) :: {:ok, [blast_result()]} | {:error, term()}
