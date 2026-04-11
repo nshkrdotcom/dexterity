@@ -23,6 +23,7 @@ Dexterity exposes a JSON-RPC/stdio MCP server through `mix dexterity.mcp.serve`.
 - `get_ranked_files`
 - `get_repo_map`
 - `get_symbols`
+- `get_export_analysis`
 - `get_unused_exports`
 - `get_test_only_exports`
 - `get_module_deps`

@@ -93,6 +93,7 @@ defmodule Dexterity.MCPTest do
     assert "status" in names
     assert "find_symbols" in names
     assert "get_unused_exports" in names
+    assert "get_export_analysis" in names
   end
 
   test "tools/call delegates to API and returns result payload" do
@@ -168,6 +169,21 @@ defmodule Dexterity.MCPTest do
              Dexterity.MCP.handle_request(unused_request, context())
 
     assert Enum.any?(unused_exports, &(&1.function == "unused"))
+
+    export_analysis_request = %{
+      "jsonrpc" => "2.0",
+      "id" => 61,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_export_analysis",
+        "arguments" => %{}
+      }
+    }
+
+    assert {:ok, %{"result" => %{"result" => export_analysis}}} =
+             Dexterity.MCP.handle_request(export_analysis_request, context())
+
+    assert Enum.any?(export_analysis, &(&1.function == "foo" and &1.kind == :public_api))
 
     test_only_request = %{
       "jsonrpc" => "2.0",

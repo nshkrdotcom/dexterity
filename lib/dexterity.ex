@@ -4,6 +4,7 @@ defmodule Dexterity do
   """
 
   alias Dexterity.Config
+  alias Dexterity.ExportAnalysis
   alias Dexterity.GraphServer
   alias Dexterity.Intelligence
   alias Dexterity.Metadata
@@ -55,6 +56,32 @@ defmodule Dexterity do
           file: String.t(),
           line: non_neg_integer(),
           used_internally: boolean()
+        }
+
+  @type export_analysis :: %{
+          module: String.t(),
+          function: String.t(),
+          arity: non_neg_integer(),
+          file: String.t(),
+          line: non_neg_integer(),
+          kind: :callback_entrypoint | :public_api,
+          reachability:
+            :callback | :internal_only | :production | :runtime | :test_only | :unused,
+          used_internally: boolean(),
+          prod_ref_count: non_neg_integer(),
+          test_ref_count: non_neg_integer(),
+          same_file_ref_count: non_neg_integer(),
+          runtime_call_count: non_neg_integer(),
+          runtime_sources: [String.t()],
+          entrypoint_sources: [String.t()]
+        }
+
+  @type runtime_observation_input :: %{
+          required(:module) => String.t() | module(),
+          required(:function) => String.t() | atom(),
+          required(:arity) => non_neg_integer(),
+          optional(:call_count) => non_neg_integer(),
+          optional(:source) => String.t()
         }
 
   @doc """
@@ -147,13 +174,39 @@ defmodule Dexterity do
   Finds exported functions with no external references.
   """
   @spec get_unused_exports(keyword()) :: {:ok, [unused_export()]} | {:error, term()}
-  def get_unused_exports(opts \\ []), do: Intelligence.unused_exports(opts)
+  def get_unused_exports(opts \\ []), do: ExportAnalysis.unused_exports(opts)
 
   @doc """
   Finds exported functions referenced only by tests.
   """
   @spec get_test_only_exports(keyword()) :: {:ok, [map()]} | {:error, term()}
-  def get_test_only_exports(opts \\ []), do: Intelligence.test_only_exports(opts)
+  def get_test_only_exports(opts \\ []), do: ExportAnalysis.test_only_exports(opts)
+
+  @doc """
+  Returns the full export reachability report.
+  """
+  @spec get_export_analysis(keyword()) :: {:ok, [export_analysis()]} | {:error, term()}
+  def get_export_analysis(opts \\ []), do: ExportAnalysis.analyze_exports(opts)
+
+  @doc """
+  Persists runtime observations for indexed exports.
+  """
+  @spec record_runtime_observations(
+          runtime_observation_input() | [runtime_observation_input()],
+          keyword()
+        ) :: {:ok, non_neg_integer()} | {:error, term()}
+  def record_runtime_observations(observations, opts \\ []) do
+    ExportAnalysis.record_runtime_observations(observations, opts)
+  end
+
+  @doc """
+  Imports runtime observations from OTP cover for compiled modules.
+  """
+  @spec import_cover_modules(module() | [module()], keyword()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def import_cover_modules(modules, opts \\ []) do
+    ExportAnalysis.import_cover_modules(modules, opts)
+  end
 
   @doc """
   Returns outbound and inbound dependencies for a file.

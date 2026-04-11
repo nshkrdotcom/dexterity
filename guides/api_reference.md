@@ -11,8 +11,11 @@ Authoritative public API behavior for Dexterity.
 - `match_files(sql_like_pattern, opts \\\\ []) :: {:ok, [String.t()]} | {:error, term()}`
 - `get_module_deps(file, opts \\\\ []) :: {:ok, %{dependencies: [String.t()], dependents: [String.t()]}} | {:error, :graph_unavailable | term()}`
 - `get_file_blast_radius(file, opts \\\\ []) :: {:ok, non_neg_integer()} | {:error, term()}`
+- `get_export_analysis(opts \\\\ []) :: {:ok, [export_analysis()]} | {:error, term()}`
 - `get_unused_exports(opts \\\\ []) :: {:ok, [unused_export()]} | {:error, term()}`
 - `get_test_only_exports(opts \\\\ []) :: {:ok, [map()]} | {:error, term()}`
+- `record_runtime_observations(observations, opts \\\\ []) :: {:ok, non_neg_integer()} | {:error, term()}`
+- `import_cover_modules(modules, opts \\\\ []) :: {:ok, non_neg_integer()} | {:error, term()}`
 - `notify_file_changed(file, opts \\\\ []) :: :ok | {:error, term()}`
 - `status() :: {:ok, status_snapshot()} | {:error, term()}`
 
@@ -31,6 +34,14 @@ Authoritative public API behavior for Dexterity.
 - `:summary_server`
 - `:store_conn`
 - `:summary_enabled`
+
+`export_analysis()` includes:
+- `:kind` (`:public_api` or `:callback_entrypoint`)
+- `:reachability` (`:production`, `:callback`, `:runtime`, `:test_only`, `:internal_only`, `:unused`)
+- `:entrypoint_sources`
+- `:runtime_call_count`
+- `:runtime_sources`
+- explicit ref counts and `:used_internally`
 
 ## Query API (`Dexterity.Query`)
 
@@ -70,7 +81,7 @@ Authoritative public API behavior for Dexterity.
   - `--output PATH`
   - `--backend MODULE`
 - `mix dexterity.query references|definition|blast|cochanges [args]`
-- `mix dexterity.query blast_count|symbols|files|unused_exports|test_only_exports [args]`
+- `mix dexterity.query blast_count|symbols|files|export_analysis|unused_exports|test_only_exports [args]`
 - `mix dexterity.mcp.serve --repo-root PATH` (production transport)
 
 ## Error and stability contract
@@ -80,6 +91,8 @@ Authoritative public API behavior for Dexterity.
 - Token budgeting in `get_repo_map/1` is bounded by config.
 - `token_budget: :auto` adapts to `:conversation_tokens` while respecting config min/max bounds.
 - Conversation terms can raise the rank of files whose path or source tokens match the current discussion.
+- Export analysis is callback-aware and does not rely only on explicit static references.
+- Runtime confirmation is optional and additive; when no runtime evidence exists, the report falls back to static analysis plus entrypoint inference.
 - Summary reads are cache-backed and only rendered when stored signature and file mtime are current.
 - Clone annotations are deterministic and suppress duplicate symbol bodies for lower-ranked matches.
 - MCP responses include `jsonrpc` and `error` payloads for non-recoverable calls.

@@ -20,7 +20,7 @@ If you want to validate the full real backend flow before wiring Dexterity into 
 mix run examples/comprehensive_real_backend.exs
 ```
 
-That example uses a real `dexter` binary, a real temporary `.dexter.db`, real git history, the live mix-task surface, and live MCP requests.
+That example uses a real `dexter` binary, a real temporary `.dexter.db`, real git history, callback-aware export analysis, a real `:cover` import for runtime confirmation, the live mix-task surface, and live MCP requests.
 
 ## Minimum local runtime
 
@@ -45,6 +45,7 @@ That example uses a real `dexter` binary, a real temporary `.dexter.db`, real gi
 {:ok, ranked} = Dexterity.get_ranked_files(limit: 20, repo_root: ".", backend: Dexterity.Backend.Dexter)
 {:ok, symbols} = Dexterity.find_symbols("refund", repo_root: ".", backend: Dexterity.Backend.Dexter)
 {:ok, files} = Dexterity.match_files("%accounts%", repo_root: ".", backend: Dexterity.Backend.Dexter)
+{:ok, exports} = Dexterity.get_export_analysis(repo_root: ".", backend: Dexterity.Backend.Dexter)
 {:ok, blast_count} = Dexterity.get_file_blast_radius("lib/my_app.ex", repo_root: ".")
 {:ok, refs} = Dexterity.Query.find_references("MyApp.Accounts", "register", 2, backend: Dexterity.Backend.Dexter)
 ```
@@ -57,6 +58,7 @@ mix dexterity.status --repo-root .
 mix dexterity.map --active-file lib/my_app.ex --limit 20 --token-budget 2048
 mix dexterity.query references MyApp.Accounts register 2
 mix dexterity.query symbols refund
+mix dexterity.query export_analysis
 mix dexterity.query unused_exports
 ```
 

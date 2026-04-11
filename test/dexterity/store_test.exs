@@ -32,6 +32,7 @@ defmodule Dexterity.StoreTest do
     assert "semantic_summaries" in rows
     assert "pagerank_cache" in rows
     assert "token_signatures" in rows
+    assert "runtime_observations" in rows
     assert "index_meta" in rows
 
     assert :ok = Store.close(conn)
@@ -99,6 +100,50 @@ defmodule Dexterity.StoreTest do
 
     assert :ok = Store.upsert_token_signature(conn, "lib/a.ex", "MyModule", signature)
     assert {:ok, ^signature} = Store.get_token_signature(conn, "lib/a.ex", "MyModule")
+
+    assert :ok = Store.close(conn)
+  end
+
+  test "runtime observations are upserted and listed", %{path: path} do
+    {:ok, conn} = Store.open(path)
+
+    assert :ok =
+             Store.upsert_runtime_observation(
+               conn,
+               "lib/a.ex",
+               "MyModule",
+               "run",
+               1,
+               "cover",
+               2,
+               1_700_000
+             )
+
+    assert :ok =
+             Store.upsert_runtime_observation(
+               conn,
+               "lib/a.ex",
+               "MyModule",
+               "run",
+               1,
+               "cover",
+               5,
+               1_700_100
+             )
+
+    assert {:ok, observations} = Store.list_runtime_observations(conn)
+
+    assert [
+             %{
+               file: "lib/a.ex",
+               module: "MyModule",
+               function: "run",
+               arity: 1,
+               source: "cover",
+               call_count: 5,
+               observed_at: 1_700_100
+             }
+           ] = observations
 
     assert :ok = Store.close(conn)
   end

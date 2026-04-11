@@ -23,7 +23,8 @@ If you want exact, repeatable codebase context instead of ad hoc grep output, th
 - `Dexterity.get_ranked_files/1` with active-file, edit, and conversation-term ranking inputs.
 - `Dexterity.get_symbols/2`, `Dexterity.find_symbols/2`, and `Dexterity.match_files/2` for targeted discovery.
 - `Dexterity.get_module_deps/2` and `Dexterity.get_file_blast_radius/2` for impact checks.
-- `Dexterity.get_unused_exports/1` and `Dexterity.get_test_only_exports/1` for dead-code style export analysis.
+- `Dexterity.get_export_analysis/1`, `Dexterity.get_unused_exports/1`, and `Dexterity.get_test_only_exports/1` for callback-aware export analysis.
+- `Dexterity.record_runtime_observations/2` and `Dexterity.import_cover_modules/2` for persisted runtime confirmation.
 - `Dexterity.Query` for definitions, references, blast radius, and cochange neighbors.
 - Mix tasks for indexing, status, map rendering, and query execution.
 - Optional MCP transport over stdio for editor and agent integrations.
@@ -36,8 +37,9 @@ Dexterity itself is pure Elixir, but the default production backend depends on e
 2. A Dexter index database must exist for the target repo, usually `.dexter.db`.
 3. `git` should be available if you want cochange analysis to be useful.
 4. Native build tooling required by `exqlite` must be available on the machine building dependencies.
+5. If you want cover-backed runtime confirmation, the OTP `tools` install and debug-info beams must be available, plus `elixirc` to build sample modules in the example flow.
 
-The included example is fully real: it creates a temporary repo, builds a real Dexter index through `mix dexterity.index`, ingests real git history for cochanges, and exercises Dexterity's mix tasks, library APIs, and MCP request handling against the resulting `.dexter.db`.
+The included example is fully real: it creates a temporary repo, builds a real Dexter index through `mix dexterity.index`, ingests real git history for cochanges, imports real OTP `:cover` runtime evidence, and exercises Dexterity's mix tasks, library APIs, and MCP request handling against the resulting `.dexter.db`.
 
 ## Installation
 
@@ -104,6 +106,7 @@ mix dexterity.query blast_count lib/my_app/accounts.ex --repo-root .
 mix dexterity.query cochanges lib/my_app/accounts.ex --repo-root . --limit 10
 mix dexterity.query symbols refund --repo-root .
 mix dexterity.query files '%accounts%' --repo-root .
+mix dexterity.query export_analysis --repo-root .
 mix dexterity.query unused_exports --repo-root .
 mix dexterity.query test_only_exports --repo-root .
 ```
@@ -164,9 +167,15 @@ mix dexterity.query test_only_exports --repo-root .
     repo_root: "/workspace/my_app",
     backend: Dexterity.Backend.Dexter
   )
+
+{:ok, export_analysis} =
+  Dexterity.get_export_analysis(
+    repo_root: "/workspace/my_app",
+    backend: Dexterity.Backend.Dexter
+  )
 ```
 
-`Dexterity.get_repo_map/1` is the main integration point for agent context. The search and analysis APIs are useful when you want deterministic follow-up queries after a model identifies a symbol or file of interest.
+`Dexterity.get_repo_map/1` is the main integration point for agent context. The search and analysis APIs are useful when you want deterministic follow-up queries after a model identifies a symbol or file of interest. `get_export_analysis/1` separates ordinary public API from callback entrypoints and can fold in persisted runtime confirmation from `import_cover_modules/2`.
 
 ## MCP Server
 
@@ -183,6 +192,7 @@ Supported tools include:
 - `find_symbols`
 - `match_files`
 - `get_symbols`
+- `get_export_analysis`
 - `get_file_blast_radius`
 - `get_unused_exports`
 - `get_test_only_exports`
@@ -211,7 +221,8 @@ That example shows:
 - definition and reference queries
 - dependency lookup and direct blast radius counts
 - cochange enrichment
-- unused-export and test-only-export analysis
+- callback-aware export analysis and unused/test-only filtered views
+- real `:cover` import for runtime-confirmed exports
 - real file reindexing
 - live MCP JSON-RPC requests
 

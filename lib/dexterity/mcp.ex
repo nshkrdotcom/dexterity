@@ -22,6 +22,7 @@ defmodule Dexterity.MCP do
     {"get_ranked_files", "Get ranked files list"},
     {"get_repo_map", "Get rendered ranked repo map"},
     {"get_symbols", "Get exported symbols for a file"},
+    {"get_export_analysis", "Get full export reachability analysis"},
     {"get_unused_exports", "Find exports with no external references"},
     {"get_test_only_exports", "Find exports referenced only by tests"},
     {"get_module_deps", "Get module dependencies"},
@@ -244,6 +245,14 @@ defmodule Dexterity.MCP do
     opts = tool_opts(params, context)
 
     Elixir.Dexterity.get_symbols(file, opts)
+    |> call_result()
+  end
+
+  defp dispatch_tool("get_export_analysis", params, context) do
+    limit = parse_integer(get_optional(params, "limit"), fallback: 500)
+    opts = Keyword.put(analysis_opts(params, context), :limit, limit)
+
+    Elixir.Dexterity.get_export_analysis(opts)
     |> call_result()
   end
 

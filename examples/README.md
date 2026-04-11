@@ -19,8 +19,9 @@ This example is intentionally real. It requires a working `dexter` binary on `PA
 - runs `mix dexterity.index` to build or refresh a real `.dexter.db`
 - starts Dexterity with `Dexterity.Backend.Dexter`
 - lets the real cochange worker ingest git history
-- exercises the mix-task surface in-process, including symbol search, file matching, blast-count lookup, and export analysis
-- exercises the main public APIs, including term-aware ranking, adaptive auto budgets, impact queries, and dead-code style export analysis
+- imports real OTP `:cover` observations for a compiled runtime probe module
+- exercises the mix-task surface in-process, including symbol search, file matching, blast-count lookup, and callback-aware export analysis
+- exercises the main public APIs, including term-aware ranking, adaptive auto budgets, impact queries, callback-aware export analysis, and runtime confirmation
 - sends live JSON-RPC requests through the MCP transport layer for the same runtime surface
 
 Use it to validate your local Dexter + Dexterity setup against a disposable repo before pointing Dexterity at a larger project.

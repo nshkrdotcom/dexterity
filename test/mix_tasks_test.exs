@@ -3,6 +3,7 @@ defmodule MixTasksTest do
 
   import ExUnit.CaptureIO
 
+  alias Dexterity.ApplicationControl
   alias Dexterity.Backend.Dexter
   alias Dexterity.Store
   alias Mix.Tasks.Dexterity.Index
@@ -112,15 +113,23 @@ defmodule MixTasksTest do
 
   setup do
     stop_app_if_running()
-    :ok
+
+    repo_root =
+      Path.join(System.tmp_dir!(), "dexterity-mix-task-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(repo_root)
+
+    on_exit(fn -> File.rm_rf(repo_root) end)
+
+    %{repo_root: repo_root}
   end
 
-  test "dexterity.index runs backend index command" do
+  test "dexterity.index runs backend index command", %{repo_root: repo_root} do
     backend = TaskBackend
 
     output =
       capture_io(fn ->
-        Index.run(["--repo-root", "tmp", "--backend", inspect(backend)])
+        Index.run(["--repo-root", repo_root, "--backend", inspect(backend)])
       end)
 
     assert output =~ "index refreshed"
@@ -167,19 +176,19 @@ defmodule MixTasksTest do
     assert {:ok, :ready} = Dexter.index_status(repo_root)
   end
 
-  test "dexterity.status prints status snapshot" do
+  test "dexterity.status prints status snapshot", %{repo_root: repo_root} do
     backend = TaskBackend
 
     output =
       capture_io(fn ->
-        Status.run(["--repo-root", "tmp", "--backend", inspect(backend)])
+        Status.run(["--repo-root", repo_root, "--backend", inspect(backend)])
       end)
 
     assert output =~ "backend:"
     assert output =~ "graph_stale:"
   end
 
-  test "dexterity.map writes result to output file" do
+  test "dexterity.map writes result to output file", %{repo_root: repo_root} do
     tmp_file =
       Path.join(
         System.tmp_dir!(),
@@ -192,7 +201,7 @@ defmodule MixTasksTest do
       capture_io(fn ->
         MapTask.run([
           "--repo-root",
-          "tmp",
+          repo_root,
           "--backend",
           inspect(backend),
           "--output",
@@ -208,7 +217,7 @@ defmodule MixTasksTest do
     on_exit(fn -> File.rm_rf(tmp_file) end)
   end
 
-  test "dexterity.query references/definition/blast/cochanges surfaces" do
+  test "dexterity.query references/definition/blast/cochanges surfaces", %{repo_root: repo_root} do
     backend = QueryTaskBackend
 
     store_path =
@@ -238,7 +247,7 @@ defmodule MixTasksTest do
           "--backend",
           inspect(backend),
           "--repo-root",
-          "tmp"
+          repo_root
         ])
       end)
 
@@ -246,14 +255,28 @@ defmodule MixTasksTest do
 
     defs =
       capture_io(fn ->
-        Query.run(["definition", "MyModule", "--backend", inspect(backend), "--repo-root", "tmp"])
+        Query.run([
+          "definition",
+          "MyModule",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          repo_root
+        ])
       end)
 
     assert defs =~ "MyModule"
 
     blast =
       capture_io(fn ->
-        Query.run(["blast", "lib/a.ex", "--backend", inspect(backend), "--repo-root", "tmp"])
+        Query.run([
+          "blast",
+          "lib/a.ex",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          repo_root
+        ])
       end)
 
     assert blast =~ "lib/a.ex"
@@ -266,7 +289,7 @@ defmodule MixTasksTest do
           "--backend",
           inspect(backend),
           "--repo-root",
-          "tmp",
+          repo_root,
           "--limit",
           "1"
         ])
@@ -276,19 +299,27 @@ defmodule MixTasksTest do
     stop_app_if_running()
   end
 
-  test "dexterity.query symbols/files/blast_count/unused_exports/test_only_exports surfaces" do
+  test "dexterity.query symbols/files/blast_count/export_analysis/unused_exports/test_only_exports surfaces",
+       %{repo_root: repo_root} do
     backend = QueryTaskBackend
 
     symbols =
       capture_io(fn ->
-        Query.run(["symbols", "register", "--backend", inspect(backend), "--repo-root", "tmp"])
+        Query.run([
+          "symbols",
+          "register",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          repo_root
+        ])
       end)
 
     assert symbols =~ "register_user"
 
     files =
       capture_io(fn ->
-        Query.run(["files", "%a%", "--backend", inspect(backend), "--repo-root", "tmp"])
+        Query.run(["files", "%a%", "--backend", inspect(backend), "--repo-root", repo_root])
       end)
 
     assert files =~ "lib/a.ex"
@@ -302,7 +333,7 @@ defmodule MixTasksTest do
           "--backend",
           inspect(backend),
           "--repo-root",
-          "tmp"
+          repo_root
         ])
       end)
 
@@ -310,14 +341,34 @@ defmodule MixTasksTest do
 
     unused =
       capture_io(fn ->
-        Query.run(["unused_exports", "--backend", inspect(backend), "--repo-root", "tmp"])
+        Query.run(["unused_exports", "--backend", inspect(backend), "--repo-root", repo_root])
       end)
 
     assert unused =~ "unused_helper"
 
+    export_analysis =
+      capture_io(fn ->
+        Query.run([
+          "export_analysis",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          repo_root
+        ])
+      end)
+
+    assert export_analysis =~ "unused_helper"
+    assert export_analysis =~ "public_api"
+
     test_only =
       capture_io(fn ->
-        Query.run(["test_only_exports", "--backend", inspect(backend), "--repo-root", "tmp"])
+        Query.run([
+          "test_only_exports",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          repo_root
+        ])
       end)
 
     assert test_only =~ "test_support"
@@ -328,11 +379,25 @@ defmodule MixTasksTest do
     pid = Process.whereis(Dexterity.Supervisor)
 
     if is_pid(pid) do
-      :ok = Application.stop(:dexterity)
+      :ok = ApplicationControl.stop_quietly(:dexterity)
+      wait_for_app_stop()
       :ok
     end
 
     :ok
+  end
+
+  defp wait_for_app_stop(attempts \\ 20)
+
+  defp wait_for_app_stop(0), do: :ok
+
+  defp wait_for_app_stop(attempts) do
+    if Process.whereis(Dexterity.Supervisor) do
+      Process.sleep(10)
+      wait_for_app_stop(attempts - 1)
+    else
+      :ok
+    end
   end
 
   defp unload_module!(module) do

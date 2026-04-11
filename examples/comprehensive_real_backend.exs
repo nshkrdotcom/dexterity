@@ -121,6 +121,11 @@ defmodule Examples.ComprehensiveRealBackend do
       print_heading("Cochanges")
       IO.inspect(Query.cochanges("lib/my_app/accounts.ex", 5), pretty: true)
 
+      import_runtime_cover!(repo_root)
+
+      print_heading("Export Analysis")
+      IO.inspect(Dexterity.get_export_analysis(), pretty: true)
+
       print_heading("Unused Exports")
       IO.inspect(Dexterity.get_unused_exports(), pretty: true)
 
@@ -212,6 +217,19 @@ defmodule Examples.ComprehensiveRealBackend do
             elixir: "~> 1.18"
           ]
         end
+
+        def application do
+          [mod: {MyApp.Application, []}]
+        end
+      end
+      """,
+      "lib/my_app/application.ex" => """
+      defmodule MyApp.Application do
+        use Application
+
+        def start(_type, _args) do
+          Supervisor.start_link([], strategy: :one_for_one)
+        end
       end
       """,
       "lib/my_app/repo.ex" => """
@@ -255,6 +273,12 @@ defmodule Examples.ComprehensiveRealBackend do
         def refund_charge(amount_cents) do
           {:refunded, amount_cents}
         end
+      end
+      """,
+      "lib/my_app/runtime_probe.ex" => """
+      defmodule MyApp.RuntimeProbe do
+        def observed_runtime, do: :runtime_seen
+        def unobserved_runtime, do: :runtime_unseen
       end
       """,
       "lib/my_app_web/live/dashboard_live.ex" => """
@@ -428,6 +452,14 @@ defmodule Examples.ComprehensiveRealBackend do
       repo_root
     ])
 
+    print_heading("Mix Task: dexterity.query export_analysis")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "export_analysis",
+      "--repo-root",
+      repo_root
+    ])
+
     print_heading("Mix Task: dexterity.query unused_exports")
 
     run_mix_task!("dexterity.query", QueryTask, [
@@ -513,6 +545,18 @@ defmodule Examples.ComprehensiveRealBackend do
         "arguments" => %{}
       }
     }, context)
+
+    print_heading("MCP tools/call get_export_analysis")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 7,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_export_analysis",
+        "arguments" => %{"limit" => 20}
+      }
+    }, context)
   end
 
   defp mcp_request!(request, context) do
@@ -543,6 +587,33 @@ defmodule Examples.ComprehensiveRealBackend do
     _output = run_cmd!("git", args, repo_root)
   end
 
+  defp import_runtime_cover!(repo_root) do
+    ensure_cover_loaded!()
+
+    beam_dir = Path.join(repo_root, "_build/runtime_probe")
+    File.mkdir_p!(beam_dir)
+
+    runtime_probe_source = Path.join(repo_root, "lib/my_app/runtime_probe.ex")
+
+    {"", 0} =
+      System.cmd("elixirc", ["-o", beam_dir, runtime_probe_source], stderr_to_stdout: true)
+
+    Code.prepend_path(beam_dir)
+
+    runtime_probe_module = String.to_atom("Elixir.MyApp.RuntimeProbe")
+    {:module, ^runtime_probe_module} = Code.ensure_loaded(runtime_probe_module)
+
+    case cover_apply(:start, []) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+    end
+
+    beam_path = Path.join(beam_dir, "Elixir.MyApp.RuntimeProbe.beam")
+    {:ok, ^runtime_probe_module} = cover_apply(:compile_beam, [String.to_charlist(beam_path)])
+    :runtime_seen = apply(runtime_probe_module, :observed_runtime, [])
+    {:ok, _recorded} = Dexterity.import_cover_modules([runtime_probe_module])
+  end
+
   defp run_cmd!(cmd, args, repo_root) do
     case System.cmd(cmd, args, cd: repo_root, stderr_to_stdout: true) do
       {output, 0} ->
@@ -571,6 +642,27 @@ defmodule Examples.ComprehensiveRealBackend do
 
   defp print_heading(label) do
     IO.puts("\n=== #{label} ===")
+  end
+
+  defp ensure_cover_loaded! do
+    if tools_ebin = cover_ebin_path() do
+      :code.add_pathz(String.to_charlist(tools_ebin))
+    end
+
+    {:module, :cover} = :code.ensure_loaded(:cover)
+  end
+
+  defp cover_apply(function_name, args) do
+    :erlang.apply(:cover, function_name, args)
+  end
+
+  defp cover_ebin_path do
+    :code.root_dir()
+    |> to_string()
+    |> Path.join("lib/tools-*/ebin")
+    |> Path.wildcard()
+    |> Enum.sort()
+    |> List.first()
   end
 end
 

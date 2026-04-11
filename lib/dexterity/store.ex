@@ -5,7 +5,7 @@ defmodule Dexterity.Store do
 
   alias Exqlite.Basic
 
-  @schema_version 2
+  @schema_version 3
   @type db_conn :: Exqlite.Connection.t()
 
   @doc """
@@ -196,6 +196,77 @@ defmodule Dexterity.Store do
   end
 
   @doc """
+  Persists runtime evidence for an exported symbol.
+  """
+  @spec upsert_runtime_observation(
+          db_conn(),
+          String.t(),
+          String.t(),
+          String.t(),
+          non_neg_integer(),
+          String.t(),
+          non_neg_integer(),
+          integer()
+        ) :: :ok | {:error, term()}
+  def upsert_runtime_observation(
+        conn,
+        file,
+        module_name,
+        function_name,
+        arity,
+        source,
+        call_count,
+        observed_at
+      ) do
+    sql = """
+    INSERT INTO runtime_observations (file, module, function, arity, source, call_count, observed_at)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+    ON CONFLICT(file, module, function, arity, source) DO UPDATE SET
+      call_count = excluded.call_count,
+      observed_at = excluded.observed_at
+    """
+
+    exec!(conn, sql, [file, module_name, function_name, arity, source, call_count, observed_at])
+  end
+
+  @doc """
+  Lists persisted runtime evidence rows.
+  """
+  @spec list_runtime_observations(db_conn()) :: {:ok, [map()]} | {:error, term()}
+  def list_runtime_observations(conn) do
+    with {:ok, rows} <-
+           query_rows(
+             conn,
+             """
+             SELECT file, module, function, arity, source, call_count, observed_at
+             FROM runtime_observations
+             ORDER BY module, function, arity, source
+             """
+           ) do
+      {:ok,
+       Enum.map(rows, fn [
+                           file,
+                           module_name,
+                           function_name,
+                           arity,
+                           source,
+                           call_count,
+                           observed_at
+                         ] ->
+         %{
+           file: file,
+           module: module_name,
+           function: function_name,
+           arity: arity,
+           source: source,
+           call_count: call_count,
+           observed_at: observed_at
+         }
+       end)}
+    end
+  end
+
+  @doc """
   Truncates all Dexterity tables, except indexes.
   """
   @spec clear_all(db_conn()) :: :ok | {:error, term()}
@@ -205,6 +276,7 @@ defmodule Dexterity.Store do
       "DELETE FROM semantic_summaries;",
       "DELETE FROM pagerank_cache;",
       "DELETE FROM token_signatures;",
+      "DELETE FROM runtime_observations;",
       "DELETE FROM index_meta;"
     ]
 
@@ -276,6 +348,18 @@ defmodule Dexterity.Store do
       CREATE TABLE IF NOT EXISTS index_meta (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
+      );
+      """,
+      """
+      CREATE TABLE IF NOT EXISTS runtime_observations (
+        file TEXT NOT NULL,
+        module TEXT NOT NULL,
+        function TEXT NOT NULL,
+        arity INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        call_count INTEGER NOT NULL DEFAULT 0,
+        observed_at INTEGER NOT NULL,
+        PRIMARY KEY (file, module, function, arity, source)
       );
       """
     ]

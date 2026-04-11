@@ -22,6 +22,7 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
   def ensure_started! do
     if Process.whereis(Dexterity.Supervisor) do
       ApplicationControl.stop_quietly(:dexterity)
+      wait_for_stop()
     end
 
     Mix.Task.reenable("app.start")
@@ -159,5 +160,18 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
     end)
 
     module
+  end
+
+  defp wait_for_stop(attempts \\ 50)
+
+  defp wait_for_stop(0), do: :ok
+
+  defp wait_for_stop(attempts) do
+    if Process.whereis(Dexterity.Supervisor) do
+      Process.sleep(10)
+      wait_for_stop(attempts - 1)
+    else
+      :ok
+    end
   end
 end
