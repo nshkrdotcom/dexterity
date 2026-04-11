@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/nshkrdotcom/dexterity">
-    <img src="https://img.shields.io/github/v/release/nshkrdotcom/dexterity?include_prereleases&style=flat-square" alt="GitHub release">
+    <img src="https://img.shields.io/badge/github-nshkrdotcom/dexterity-181717?logo=github&style=flat-square" alt="GitHub">
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License">
