@@ -152,7 +152,13 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
             "module #{inspect(module)} does not satisfy Dexterity.Backend contract"
     end
 
-    Enum.each(Dexterity.Backend.behaviour_info(:callbacks), fn {func, arity} ->
+    optional_callbacks =
+      Dexterity.Backend.behaviour_info(:optional_callbacks)
+      |> MapSet.new()
+
+    Dexterity.Backend.behaviour_info(:callbacks)
+    |> Enum.reject(&MapSet.member?(optional_callbacks, &1))
+    |> Enum.each(fn {func, arity} ->
       unless function_exported?(module, func, arity) do
         raise ArgumentError,
               "module #{inspect(module)} does not implement #{func}/#{arity}"

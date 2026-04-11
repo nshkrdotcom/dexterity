@@ -2,7 +2,7 @@ defmodule Dexterity.MCP do
   @moduledoc """
   Deterministic JSON-RPC/MCP transport over stdio.
   """
-  alias Dexterity.{Config, GraphServer, Query}
+  alias Dexterity.{Config, GraphServer, Query, SymbolGraphServer}
 
   @jsonrpc "2.0"
   @parse_error -32_700
@@ -20,6 +20,8 @@ defmodule Dexterity.MCP do
     {"match_files", "Match indexed file paths with SQL LIKE wildcards"},
     {"get_file_blast_radius", "Count direct dependents for a file"},
     {"get_ranked_files", "Get ranked files list"},
+    {"get_ranked_symbols", "Get ranked symbols list"},
+    {"get_impact_context", "Get rendered impact context for changed symbols/files"},
     {"get_repo_map", "Get rendered ranked repo map"},
     {"get_symbols", "Get exported symbols for a file"},
     {"get_export_analysis", "Get full export reachability analysis"},
@@ -29,14 +31,20 @@ defmodule Dexterity.MCP do
     {"status", "Get runtime status snapshot"}
   ]
 
-  @type runtime_context :: %{backend: module(), repo_root: String.t(), graph_server: module()}
+  @type runtime_context :: %{
+          backend: module(),
+          repo_root: String.t(),
+          graph_server: module(),
+          symbol_graph_server: module()
+        }
 
   @spec serve(keyword()) :: :ok
   def serve(opts \\ []) do
     context = %{
       backend: Keyword.get(opts, :backend, Config.fetch(:backend)),
       repo_root: Keyword.get(opts, :repo_root, Config.repo_root()),
-      graph_server: Keyword.get(opts, :graph_server, GraphServer)
+      graph_server: Keyword.get(opts, :graph_server, GraphServer),
+      symbol_graph_server: Keyword.get(opts, :symbol_graph_server, SymbolGraphServer)
     }
 
     :stdio
@@ -231,6 +239,32 @@ defmodule Dexterity.MCP do
     |> call_result()
   end
 
+  defp dispatch_tool("get_ranked_symbols", params, context) do
+    opts = map_query_opts(params, context)
+
+    Elixir.Dexterity.get_ranked_symbols(opts)
+    |> call_result()
+  end
+
+  defp dispatch_tool("get_impact_context", params, context) do
+    changed_files =
+      parse_file_list(
+        get_optional(params, "changed_files") || get_optional(params, "changedFiles")
+      )
+
+    opts =
+      params
+      |> map_query_opts(context)
+      |> Keyword.put(:changed_files, changed_files)
+      |> Keyword.put(
+        :token_budget,
+        parse_integer(get_optional(params, "token_budget"), fallback: 2_048)
+      )
+
+    Elixir.Dexterity.get_impact_context(opts)
+    |> call_result()
+  end
+
   defp dispatch_tool("get_repo_map", params, context) do
     opts = map_query_opts(params, context)
     token_budget = parse_integer(get_optional(params, "token_budget"), fallback: :auto)
@@ -310,6 +344,10 @@ defmodule Dexterity.MCP do
   defp analysis_opts(params, context) do
     tool_opts(params, context)
     |> Keyword.put(:graph_server, context.graph_server)
+    |> Keyword.put(
+      :symbol_graph_server,
+      Map.get(context, :symbol_graph_server, SymbolGraphServer)
+    )
   end
 
   defp map_query_opts(params, context) do
@@ -350,7 +388,8 @@ defmodule Dexterity.MCP do
       mentioned_files: mentioned_files,
       edited_files: edited_files,
       conversation_terms: conversation_terms,
-      graph_server: context.graph_server
+      graph_server: context.graph_server,
+      symbol_graph_server: Map.get(context, :symbol_graph_server, SymbolGraphServer)
     ]
 
     opts =

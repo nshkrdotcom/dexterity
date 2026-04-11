@@ -109,6 +109,53 @@ defmodule MixTasksTest do
 
     @impl true
     def healthy?(_repo_root), do: {:ok, true}
+
+    @impl true
+    def list_symbol_nodes(_repo_root) do
+      {:ok,
+       [
+         %{
+           module: "MyModule",
+           function: "call",
+           arity: 1,
+           file: "lib/a.ex",
+           line: 3,
+           end_line: 5,
+           visibility: :public,
+           signature: "def call(input)",
+           kind: "def"
+         },
+         %{
+           module: "Searchable",
+           function: "register_user",
+           arity: 1,
+           file: "lib/b.ex",
+           line: 4,
+           end_line: 4,
+           visibility: :public,
+           signature: "def register_user(attrs)",
+           kind: "def"
+         }
+       ]}
+    end
+
+    @impl true
+    def list_symbol_edges(_repo_root) do
+      {:ok,
+       [
+         %{
+           source: %{module: "MyModule", function: "call", arity: 1, file: "lib/a.ex", line: 3},
+           target: %{
+             module: "Searchable",
+             function: "register_user",
+             arity: 1,
+             file: "lib/b.ex",
+             line: 4
+           },
+           weight: 1.0
+         }
+       ]}
+    end
   end
 
   setup do
@@ -299,7 +346,7 @@ defmodule MixTasksTest do
     stop_app_if_running()
   end
 
-  test "dexterity.query symbols/files/blast_count/export_analysis/unused_exports/test_only_exports surfaces",
+  test "dexterity.query symbols/files/blast_count/ranked_symbols/impact_context/export_analysis/unused_exports/test_only_exports surfaces",
        %{repo_root: repo_root} do
     backend = QueryTaskBackend
 
@@ -338,6 +385,38 @@ defmodule MixTasksTest do
       end)
 
     assert blast_count =~ "2"
+
+    ranked_symbols =
+      capture_io(fn ->
+        Query.run([
+          "ranked_symbols",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          repo_root,
+          "--active-file",
+          "lib/a.ex"
+        ])
+      end)
+
+    assert ranked_symbols =~ "register_user"
+
+    impact_context =
+      capture_io(fn ->
+        Query.run([
+          "impact_context",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          repo_root,
+          "--changed-file",
+          "lib/a.ex",
+          "--token-budget",
+          "512"
+        ])
+      end)
+
+    assert impact_context =~ "MyModule.call/1"
 
     unused =
       capture_io(fn ->

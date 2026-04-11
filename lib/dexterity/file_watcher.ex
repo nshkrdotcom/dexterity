@@ -8,6 +8,7 @@ defmodule Dexterity.FileWatcher do
   alias Dexterity.Backend.Dexter
   alias Dexterity.Config
   alias Dexterity.GraphServer
+  alias Dexterity.SymbolGraphServer
 
   @extensions [".ex", ".exs"]
 
@@ -95,6 +96,7 @@ defmodule Dexterity.FileWatcher do
 
     if files != [] do
       GraphServer.mark_stale(state.graph_server)
+      SymbolGraphServer.mark_stale()
     end
 
     {:noreply, %{state | pending: MapSet.new()}}

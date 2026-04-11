@@ -51,6 +51,47 @@ defmodule Dexterity.MCPTest do
 
     @impl true
     def healthy?(_repo_root), do: {:ok, true}
+
+    @impl true
+    def list_symbol_nodes(_repo_root) do
+      {:ok,
+       [
+         %{
+           module: "A",
+           function: "foo",
+           arity: 1,
+           file: "lib/a.ex",
+           line: 1,
+           end_line: 2,
+           visibility: :public,
+           signature: "def foo(arg)",
+           kind: "def"
+         },
+         %{
+           module: "A",
+           function: "unused",
+           arity: 0,
+           file: "lib/a.ex",
+           line: 3,
+           end_line: 3,
+           visibility: :public,
+           signature: "def unused()",
+           kind: "def"
+         }
+       ]}
+    end
+
+    @impl true
+    def list_symbol_edges(_repo_root) do
+      {:ok,
+       [
+         %{
+           source: %{module: "A", function: "foo", arity: 1, file: "lib/a.ex", line: 1},
+           target: %{module: "A", function: "unused", arity: 0, file: "lib/a.ex", line: 3},
+           weight: 0.5
+         }
+       ]}
+    end
   end
 
   defp context do
@@ -92,6 +133,8 @@ defmodule Dexterity.MCPTest do
     assert "query_references" in names
     assert "status" in names
     assert "find_symbols" in names
+    assert "get_ranked_symbols" in names
+    assert "get_impact_context" in names
     assert "get_unused_exports" in names
     assert "get_export_analysis" in names
   end
@@ -170,6 +213,21 @@ defmodule Dexterity.MCPTest do
 
     assert Enum.any?(unused_exports, &(&1.function == "unused"))
 
+    ranked_symbols_request = %{
+      "jsonrpc" => "2.0",
+      "id" => 60,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_ranked_symbols",
+        "arguments" => %{"active_file" => "lib/a.ex"}
+      }
+    }
+
+    assert {:ok, %{"result" => %{"result" => ranked_symbols}}} =
+             Dexterity.MCP.handle_request(ranked_symbols_request, context())
+
+    assert Enum.any?(ranked_symbols, &(&1.function == "foo"))
+
     export_analysis_request = %{
       "jsonrpc" => "2.0",
       "id" => 61,
@@ -184,6 +242,21 @@ defmodule Dexterity.MCPTest do
              Dexterity.MCP.handle_request(export_analysis_request, context())
 
     assert Enum.any?(export_analysis, &(&1.function == "foo" and &1.kind == :public_api))
+
+    impact_context_request = %{
+      "jsonrpc" => "2.0",
+      "id" => 62,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_impact_context",
+        "arguments" => %{"changed_files" => ["lib/a.ex"], "token_budget" => 512}
+      }
+    }
+
+    assert {:ok, %{"result" => %{"result" => impact_context}}} =
+             Dexterity.MCP.handle_request(impact_context_request, context())
+
+    assert impact_context =~ "A.foo/1"
 
     test_only_request = %{
       "jsonrpc" => "2.0",

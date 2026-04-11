@@ -86,4 +86,68 @@ defmodule Dexterity.RenderTest do
     assert output =~ "## lib/stable.ex"
     refute output =~ "## lib/stable.ex [NEW]"
   end
+
+  test "renders adaptive symbol blocks for impact context" do
+    ranked_symbols = [
+      %{
+        id: "A.run/0@lib/a.ex",
+        module: "A",
+        function: "run",
+        arity: 0,
+        file: "lib/a.ex",
+        line: 1,
+        end_line: 3,
+        signature: "def run()",
+        visibility: :public,
+        kind: "def",
+        rank: 1.0
+      },
+      %{
+        id: "B.calculate/1@lib/b.ex",
+        module: "B",
+        function: "calculate",
+        arity: 1,
+        file: "lib/b.ex",
+        line: 1,
+        end_line: 3,
+        signature: "def calculate(input)",
+        visibility: :public,
+        kind: "def",
+        rank: 0.8
+      },
+      %{
+        id: "C.persist/1@lib/c.ex",
+        module: "C",
+        function: "persist",
+        arity: 1,
+        file: "lib/c.ex",
+        line: 1,
+        end_line: 2,
+        signature: "def persist(result)",
+        visibility: :public,
+        kind: "def",
+        rank: 0.4
+      }
+    ]
+
+    source_snippets = %{
+      "A.run/0@lib/a.ex" => "def run() do\n  B.calculate(1)\nend",
+      "B.calculate/1@lib/b.ex" => "def calculate(input) do\n  C.persist(input)\nend",
+      "C.persist/1@lib/c.ex" => "def persist(result), do: result"
+    }
+
+    output =
+      Render.render_symbols(
+        ranked_symbols,
+        source_snippets,
+        MapSet.new(["A.run/0@lib/a.ex"]),
+        1_000
+      )
+
+    assert output =~ "### A.run/0 [CHANGED]"
+    assert output =~ "```elixir"
+    assert output =~ "def run() do"
+    assert output =~ "- signature: def calculate(input)"
+    assert output =~ "- `C.persist/1` in `lib/c.ex`"
+  end
 end

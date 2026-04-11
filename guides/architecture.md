@@ -6,6 +6,7 @@
   - `StoreServer` for metadata DB lifecycle.
   - `IndexSupervisor` with `Indexer` + `FileWatcher`.
   - `GraphServer` for graph/rank state.
+  - `SymbolGraphServer` for symbol graph/rank state.
   - `CochangeWorker` for temporal coupling.
   - `SummaryWorker` for optional summary cache updates.
 
@@ -16,10 +17,11 @@
    - base edges from backend
    - source-derived metadata edges from `use`, `@behaviour`, and `defimpl`
    - temporal edges from `Store`
-3. Internal source-analysis code parses tracked files for render annotations, clone tokens, and summary inputs.
-4. Context inputs (`active_file`, `mentioned_files`, `edited_files`) are applied as query context.
-5. `Dexterity` fetches symbols, validates cached summaries by mtime/signature, persists clone signatures, and renders deterministic map text.
-5. Mix tasks and MCP call the same public API modules.
+3. `SymbolGraphServer` builds a separate function/symbol graph from backend symbol nodes and symbol call edges, with a deterministic fallback path when only definitions/references are available.
+4. Internal source-analysis code parses tracked files for render annotations, symbol signatures/ranges, clone tokens, and summary inputs.
+5. Context inputs (`active_file`, `mentioned_files`, `edited_files`, `changed_files`) are applied as query context.
+6. `Dexterity` fetches symbols, validates cached summaries by mtime/signature, persists clone signatures, and renders deterministic file-level or symbol-level context text.
+7. Mix tasks and MCP call the same public API modules.
 
 ## Build boundaries
 

@@ -10,6 +10,8 @@ defmodule Mix.Tasks.Dexterity.Query do
       mix dexterity.query cochanges <file> [--limit N]
       mix dexterity.query symbols <query> [--limit N]
       mix dexterity.query files <sql_like_pattern> [--limit N]
+      mix dexterity.query ranked_symbols [--active-file path] [--mentioned-file path]
+      mix dexterity.query impact_context [--changed-file path] [--token-budget N]
       mix dexterity.query export_analysis [--limit N]
       mix dexterity.query unused_exports [--limit N]
       mix dexterity.query test_only_exports
@@ -29,7 +31,17 @@ defmodule Mix.Tasks.Dexterity.Query do
     parsed =
       OptionParser.parse!(
         argv,
-        strict: [repo_root: :string, backend: :string, depth: :integer, limit: :integer]
+        strict: [
+          repo_root: :string,
+          backend: :string,
+          depth: :integer,
+          limit: :integer,
+          token_budget: :string,
+          active_file: :string,
+          mentioned_file: :keep,
+          edited_file: :keep,
+          changed_file: :keep
+        ]
       )
 
     opts = elem(parsed, 0)
@@ -38,7 +50,7 @@ defmodule Mix.Tasks.Dexterity.Query do
     if args == [] do
       Helpers.exit_with_error(
         "missing subcommand",
-        "expected references|definition|blast|blast_count|cochanges|symbols|files|export_analysis|unused_exports|test_only_exports"
+        "expected references|definition|blast|blast_count|cochanges|symbols|files|ranked_symbols|impact_context|export_analysis|unused_exports|test_only_exports"
       )
     end
 
@@ -79,6 +91,8 @@ defmodule Mix.Tasks.Dexterity.Query do
   defp dispatch_command("cochanges", params, opts), do: run_cochanges(params, opts)
   defp dispatch_command("symbols", params, opts), do: run_symbol_search(params, opts)
   defp dispatch_command("files", params, opts), do: run_file_match(params, opts)
+  defp dispatch_command("ranked_symbols", params, opts), do: run_ranked_symbols(params, opts)
+  defp dispatch_command("impact_context", params, opts), do: run_impact_context(params, opts)
   defp dispatch_command("export_analysis", params, opts), do: run_export_analysis(params, opts)
   defp dispatch_command("unused_exports", params, opts), do: run_unused_exports(params, opts)
 
@@ -218,6 +232,40 @@ defmodule Mix.Tasks.Dexterity.Query do
   defp run_file_match(_params, _opts),
     do: Helpers.exit_with_error("files query accepts exactly one pattern", nil)
 
+  defp run_ranked_symbols([], opts) do
+    query_opts = ranked_symbol_opts(opts)
+
+    case Dexterity.get_ranked_symbols(query_opts) do
+      {:ok, result} ->
+        render_query_result(:ranked_symbols, result)
+
+      {:error, reason} ->
+        Helpers.exit_with_error("ranked_symbols query failed", reason)
+    end
+  end
+
+  defp run_ranked_symbols(_params, _opts),
+    do: Helpers.exit_with_error("ranked_symbols does not accept positional arguments", nil)
+
+  defp run_impact_context([], opts) do
+    query_opts =
+      opts
+      |> ranked_symbol_opts()
+      |> Keyword.put(:changed_files, Helpers.parse_file_list(opts, :changed_file))
+      |> Keyword.put(:token_budget, Helpers.parse_token_budget(opts))
+
+    case Dexterity.get_impact_context(query_opts) do
+      {:ok, result} ->
+        render_query_result(:impact_context, result)
+
+      {:error, reason} ->
+        Helpers.exit_with_error("impact_context query failed", reason)
+    end
+  end
+
+  defp run_impact_context(_params, _opts),
+    do: Helpers.exit_with_error("impact_context does not accept positional arguments", nil)
+
   defp run_export_analysis([], opts) do
     query_opts = [
       graph_server: GraphServer,
@@ -276,6 +324,19 @@ defmodule Mix.Tasks.Dexterity.Query do
 
   defp run_test_only_exports(_params, _opts),
     do: Helpers.exit_with_error("test_only_exports does not accept positional arguments", nil)
+
+  defp ranked_symbol_opts(opts) do
+    [
+      graph_server: GraphServer,
+      symbol_graph_server: Dexterity.SymbolGraphServer,
+      backend: Helpers.parse_backend(opts),
+      repo_root: Helpers.parse_repo_root(opts),
+      limit: Helpers.parse_limit(opts),
+      active_file: Keyword.get(opts, :active_file),
+      mentioned_files: Helpers.parse_file_list(opts, :mentioned_file),
+      edited_files: Helpers.parse_file_list(opts, :edited_file)
+    ]
+  end
 
   defp query_params([module_name]), do: {module_name, nil, nil}
   defp query_params([module_name, function_name]), do: {module_name, function_name, nil}

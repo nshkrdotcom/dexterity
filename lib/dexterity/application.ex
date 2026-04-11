@@ -12,6 +12,8 @@ defmodule Dexterity.Application do
       {Dexterity.IndexSupervisor,
        [repo_root: Config.repo_root(), backend: Config.fetch(:backend)]},
       {Dexterity.GraphServer, [repo_root: Config.repo_root(), backend: Config.fetch(:backend)]},
+      {Dexterity.SymbolGraphServer,
+       [repo_root: Config.repo_root(), backend: Config.fetch(:backend)]},
       {Dexterity.CochangeWorker,
        [repo_root: Config.repo_root(), interval_ms: Config.cochange_interval_ms()]},
       {Dexterity.SummaryWorker, [enabled: Config.fetch(:summary_enabled)]}

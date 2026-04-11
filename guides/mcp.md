@@ -21,6 +21,8 @@ Dexterity exposes a JSON-RPC/stdio MCP server through `mix dexterity.mcp.serve`.
 - `match_files`
 - `get_file_blast_radius`
 - `get_ranked_files`
+- `get_ranked_symbols`
+- `get_impact_context`
 - `get_repo_map`
 - `get_symbols`
 - `get_export_analysis`
@@ -38,6 +40,7 @@ Dexterity exposes a JSON-RPC/stdio MCP server through `mix dexterity.mcp.serve`.
 ## Configuration
 
 - Uses the same backend/repo runtime environment as API and mix tasks.
+- When no matching running symbol-graph process exists for the requested backend/repo pair, symbol ranking calls can build a temporary symbol graph for that request.
 - MCP is guarded by config and should be disabled in untrusted contexts.
 
 ## Operational posture

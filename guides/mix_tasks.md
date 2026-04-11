@@ -41,6 +41,8 @@ Renders map text to stdout or writes to file.
 - `cochanges FILE [--limit N]`
 - `symbols QUERY [--limit N]`
 - `files SQL_LIKE_PATTERN [--limit N]`
+- `ranked_symbols [--active-file FILE] [--mentioned-file FILE] [--limit N]`
+- `impact_context [--changed-file FILE] [--token-budget N] [--limit N]`
 - `export_analysis [--limit N]`
 - `unused_exports [--limit N]`
 - `test_only_exports`

@@ -3,6 +3,7 @@ defmodule Dexterity do
   Core public API for Dexterity.
   """
 
+  alias Dexterity.AnalysisSupport
   alias Dexterity.Config
   alias Dexterity.ExportAnalysis
   alias Dexterity.GraphServer
@@ -12,6 +13,7 @@ defmodule Dexterity do
   alias Dexterity.Store
   alias Dexterity.StoreServer
   alias Dexterity.SummaryWorker
+  alias Dexterity.SymbolGraphServer
 
   @type context_opts :: [
           active_file: String.t(),
@@ -26,9 +28,12 @@ defmodule Dexterity do
           backend: module(),
           repo_root: String.t(),
           graph_server: GenServer.server(),
+          symbol_graph_server: GenServer.server(),
           summary_server: GenServer.server(),
           store_conn: Dexterity.Store.db_conn() | nil,
-          summary_enabled: boolean()
+          summary_enabled: boolean(),
+          changed_files: [String.t()],
+          changed_symbols: [map()]
         ]
 
   @type status_snapshot :: %{
@@ -152,6 +157,76 @@ defmodule Dexterity do
   end
 
   @doc """
+  Returns ranked symbols ordered by contextual relevance.
+  """
+  @spec get_ranked_symbols(context_opts()) :: {:ok, [map()]} | {:error, term()}
+  def get_ranked_symbols(opts \\ []) do
+    with_symbol_graph_server(opts, fn symbol_graph_server ->
+      limit = Keyword.get(opts, :limit, 50)
+      min_rank = Keyword.get(opts, :min_rank, 0.0)
+      conversation_terms = Keyword.get(opts, :conversation_terms, [])
+
+      symbol_context = %{
+        files: context_files(opts),
+        symbols: Keyword.get(opts, :changed_symbols, [])
+      }
+
+      with {:ok, ranked} <-
+             SymbolGraphServer.get_ranked_symbols(
+               symbol_graph_server,
+               symbol_context,
+               limit: max(limit * 3, limit),
+               conversation_terms: conversation_terms
+             ) do
+        ranked
+        |> blend_symbol_scores(opts)
+        |> Enum.filter(&((Map.get(&1, :rank, 0.0) || 0.0) >= min_rank))
+        |> Enum.take(limit)
+        |> then(&{:ok, &1})
+      end
+    end)
+  rescue
+    _ -> {:error, :symbol_graph_unavailable}
+  end
+
+  @doc """
+  Returns rendered impact context for changed files and/or changed symbols.
+  """
+  @spec get_impact_context(context_opts()) :: {:ok, String.t()} | {:error, term()}
+  def get_impact_context(opts \\ []) do
+    with_symbol_graph_server(opts, fn symbol_graph_server ->
+      budget = Keyword.get(opts, :token_budget, 2_048)
+      limit = Keyword.get(opts, :limit, 24)
+
+      changed_files =
+        Keyword.get(opts, :changed_files, [])
+        |> Enum.filter(&is_binary/1)
+
+      changed_symbols = Keyword.get(opts, :changed_symbols, [])
+
+      impact_opts =
+        opts
+        |> Keyword.put(:limit, limit)
+        |> Keyword.put(:changed_symbols, changed_symbols)
+        |> Keyword.put(:symbol_graph_server, symbol_graph_server)
+        |> Keyword.put(:active_file, nil)
+        |> Keyword.put(:mentioned_files, [])
+        |> Keyword.put(:edited_files, changed_files)
+
+      with {:ok, ranked_symbols} <- get_ranked_symbols(impact_opts),
+           snippets when is_map(snippets) <-
+             SymbolGraphServer.get_source_snippets(symbol_graph_server) do
+        changed_ids = changed_symbol_ids(ranked_symbols, changed_files, changed_symbols)
+
+        {:ok,
+         Render.render_symbols(ranked_symbols, snippets, changed_ids, normalize_budget(budget))}
+      end
+    end)
+  rescue
+    _ -> {:error, :symbol_graph_unavailable}
+  end
+
+  @doc """
   Searches exported symbols across indexed files.
   """
   @spec find_symbols(String.t(), keyword()) :: {:ok, [ranked_symbol()]} | {:error, term()}
@@ -262,6 +337,7 @@ defmodule Dexterity do
 
     with :ok <- backend.reindex_file(file, repo_root: repo_root) do
       GraphServer.mark_stale(GraphServer)
+      SymbolGraphServer.mark_stale(SymbolGraphServer)
       :ok
     end
   end
@@ -358,6 +434,136 @@ defmodule Dexterity do
     ranked = if is_map(ranked), do: Enum.to_list(ranked), else: ranked
     filtered = Enum.filter(ranked, fn {_file, rank} -> rank >= min_rank end)
     {:ok, filtered}
+  end
+
+  defp blend_symbol_scores(ranked_symbols, opts) do
+    file_baseline = AnalysisSupport.baseline_rank(Keyword.get(opts, :graph_server, GraphServer))
+    changed_files = Keyword.get(opts, :changed_files, [])
+    cochange_boosts = impact_cochange_boosts(changed_files, store_conn(opts))
+
+    Enum.map(ranked_symbols, fn symbol ->
+      file_score = Map.get(file_baseline, symbol.file, 0.0) * 0.35
+      changed_boost = if symbol.file in changed_files, do: 0.75, else: 0.0
+      cochange_score = Map.get(cochange_boosts, symbol.file, 0.0) * 0.2
+
+      Map.update!(symbol, :rank, &(&1 + file_score + changed_boost + cochange_score))
+    end)
+    |> Enum.sort_by(fn symbol -> {-symbol.rank, symbol.file, symbol.line, symbol.function} end)
+  end
+
+  defp impact_cochange_boosts([], _store_conn), do: %{}
+  defp impact_cochange_boosts(_changed_files, nil), do: %{}
+
+  defp impact_cochange_boosts(changed_files, store_conn) do
+    changed_files = MapSet.new(changed_files)
+
+    case Store.list_cochanges(store_conn) do
+      {:ok, rows} ->
+        Enum.reduce(rows, %{}, fn {file_a, file_b, _frequency, weight}, acc ->
+          cond do
+            MapSet.member?(changed_files, file_a) and not MapSet.member?(changed_files, file_b) ->
+              Map.update(acc, file_b, weight, &max(&1, weight))
+
+            MapSet.member?(changed_files, file_b) and not MapSet.member?(changed_files, file_a) ->
+              Map.update(acc, file_a, weight, &max(&1, weight))
+
+            true ->
+              acc
+          end
+        end)
+
+      _ ->
+        %{}
+    end
+  rescue
+    _ -> %{}
+  end
+
+  defp changed_symbol_ids(ranked_symbols, changed_files, changed_symbols) do
+    changed_files = MapSet.new(changed_files)
+
+    ranked_symbols
+    |> Enum.filter(fn symbol ->
+      MapSet.member?(changed_files, symbol.file) or changed_symbol?(symbol, changed_symbols)
+    end)
+    |> Enum.map(& &1.id)
+    |> MapSet.new()
+  end
+
+  defp changed_symbol?(symbol, changed_symbols) do
+    Enum.any?(changed_symbols, fn candidate ->
+      Map.get(candidate, :module) == symbol.module and
+        Map.get(candidate, :function) == symbol.function and
+        Map.get(candidate, :arity) == symbol.arity and
+        match_file(candidate, symbol.file)
+    end)
+  end
+
+  defp match_file(candidate, file) do
+    case Map.get(candidate, :file) do
+      nil -> true
+      candidate_file -> candidate_file == file
+    end
+  end
+
+  defp normalize_budget(:auto), do: 2_048
+  defp normalize_budget(nil), do: 2_048
+  defp normalize_budget(value) when is_integer(value) and value > 0, do: value
+  defp normalize_budget(_value), do: 2_048
+
+  defp with_symbol_graph_server(opts, fun) do
+    case resolve_symbol_graph_server(
+           Keyword.get(opts, :symbol_graph_server, SymbolGraphServer),
+           opts
+         ) do
+      {:ok, server} ->
+        fun.(server)
+
+      :error ->
+        backend = Keyword.get(opts, :backend, Config.fetch(:backend))
+        repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
+
+        {:ok, pid} =
+          SymbolGraphServer.start_link(repo_root: repo_root, backend: backend, name: nil)
+
+        try do
+          fun.(pid)
+        after
+          GenServer.stop(pid, :normal, 5_000)
+        end
+    end
+  end
+
+  defp resolve_symbol_graph_server(server, opts) when is_pid(server) do
+    if Process.alive?(server) and symbol_graph_matches?(server, opts) do
+      {:ok, server}
+    else
+      :error
+    end
+  end
+
+  defp resolve_symbol_graph_server(server, opts) when is_atom(server) do
+    case Process.whereis(server) do
+      pid when is_pid(pid) ->
+        if symbol_graph_matches?(pid, opts), do: {:ok, pid}, else: :error
+
+      _ ->
+        :error
+    end
+  end
+
+  defp resolve_symbol_graph_server(_server, _opts), do: :error
+
+  defp symbol_graph_matches?(pid, opts) do
+    state = :sys.get_state(pid)
+    requested_repo_root = Keyword.get(opts, :repo_root, Config.repo_root()) |> Path.expand()
+    requested_backend = Keyword.get(opts, :backend, Config.fetch(:backend))
+
+    state.repo_root |> Path.expand() == requested_repo_root and state.backend == requested_backend
+  rescue
+    _ -> false
+  catch
+    :exit, _reason -> false
   end
 
   defp context_files(opts) do

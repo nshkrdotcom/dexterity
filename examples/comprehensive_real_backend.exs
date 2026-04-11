@@ -72,6 +72,18 @@ defmodule Examples.ComprehensiveRealBackend do
 
       IO.inspect(filter_project_files(ranked_with_terms), pretty: true)
 
+      print_heading("Ranked Symbols")
+
+      IO.inspect(
+        Dexterity.get_ranked_symbols(
+          active_file: "lib/my_app_web/live/dashboard_live.ex",
+          changed_files: ["lib/my_app/accounts.ex"],
+          conversation_terms: ["refund"],
+          limit: 8
+        ),
+        pretty: true
+      )
+
       print_heading("Status")
       IO.inspect(Dexterity.status(), pretty: true)
 
@@ -115,6 +127,18 @@ defmodule Examples.ComprehensiveRealBackend do
       print_heading("Blast Radius")
 
       IO.inspect(Query.blast_radius("lib/my_app_web/live/dashboard_live.ex", depth: 2),
+        pretty: true
+      )
+
+      print_heading("Impact Context")
+
+      IO.inspect(
+        Dexterity.get_impact_context(
+          changed_files: ["lib/my_app/accounts.ex", "lib/my_app_web/live/dashboard_live.ex"],
+          conversation_terms: ["refund", "dashboard"],
+          token_budget: 1_500,
+          limit: 8
+        ),
         pretty: true
       )
 
@@ -443,6 +467,32 @@ defmodule Examples.ComprehensiveRealBackend do
       repo_root
     ])
 
+    print_heading("Mix Task: dexterity.query ranked_symbols")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "ranked_symbols",
+      "--repo-root",
+      repo_root,
+      "--active-file",
+      "lib/my_app_web/live/dashboard_live.ex",
+      "--mentioned-file",
+      "lib/my_app/accounts.ex"
+    ])
+
+    print_heading("Mix Task: dexterity.query impact_context")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "impact_context",
+      "--repo-root",
+      repo_root,
+      "--changed-file",
+      "lib/my_app/accounts.ex",
+      "--changed-file",
+      "lib/my_app_web/live/dashboard_live.ex",
+      "--token-budget",
+      "1500"
+    ])
+
     print_heading("Mix Task: dexterity.query blast_count")
 
     run_mix_task!("dexterity.query", QueryTask, [
@@ -531,6 +581,38 @@ defmodule Examples.ComprehensiveRealBackend do
       "params" => %{
         "name" => "find_symbols",
         "arguments" => %{"query" => "refund"}
+      }
+    }, context)
+
+    print_heading("MCP tools/call get_ranked_symbols")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 51,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_ranked_symbols",
+        "arguments" => %{
+          "active_file" => "lib/my_app_web/live/dashboard_live.ex",
+          "mentioned_files" => ["lib/my_app/accounts.ex"],
+          "limit" => 6
+        }
+      }
+    }, context)
+
+    print_heading("MCP tools/call get_impact_context")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 52,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_impact_context",
+        "arguments" => %{
+          "changed_files" => ["lib/my_app/accounts.ex", "lib/my_app_web/live/dashboard_live.ex"],
+          "token_budget" => 1500,
+          "limit" => 6
+        }
       }
     }, context)
 

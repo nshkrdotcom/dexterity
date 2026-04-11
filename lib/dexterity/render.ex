@@ -114,4 +114,68 @@ defmodule Dexterity.Render do
     rendered_similarity = :erlang.float_to_binary(similarity, decimals: 2)
     ["- [CLONE of #{source}, similarity: #{rendered_similarity}]"]
   end
+
+  @spec render_symbols([map()], map(), MapSet.t(String.t()) | [String.t()], integer()) ::
+          String.t()
+  def render_symbols(ranked_symbols, source_snippets, changed_ids, budget) do
+    changed_ids = MapSet.new(changed_ids)
+    budget = max(budget, 1)
+
+    {output, _used} =
+      ranked_symbols
+      |> Enum.with_index()
+      |> Enum.reduce_while({"", 0}, fn {symbol, index}, {acc, used} ->
+        block = render_symbol(symbol, index, source_snippets, changed_ids)
+        block_tokens = Tokenizer.count(block)
+
+        if used + block_tokens > budget do
+          {:halt, {acc, used}}
+        else
+          {:cont, {acc <> block, used + block_tokens}}
+        end
+      end)
+
+    output
+  end
+
+  defp render_symbol(symbol, index, source_snippets, changed_ids) do
+    changed? = MapSet.member?(changed_ids, symbol.id)
+
+    case render_tier(index) do
+      :full ->
+        snippet = Map.get(source_snippets, symbol.id, "")
+
+        """
+
+        ### #{symbol_heading(symbol, changed?)}
+        - file: `#{symbol.file}`
+        - rank: #{Float.round(symbol.rank, 6)}
+        - signature: #{Map.get(symbol, :signature, "#{symbol.function}/#{symbol.arity}")}
+        ```elixir
+        #{String.trim(snippet)}
+        ```
+        """
+
+      :signature ->
+        """
+
+        ### #{symbol_heading(symbol, changed?)}
+        - file: `#{symbol.file}`
+        - rank: #{Float.round(symbol.rank, 6)}
+        - signature: #{Map.get(symbol, :signature, "#{symbol.function}/#{symbol.arity}")}
+        """
+
+      :compact ->
+        "\n- `#{symbol.module}.#{symbol.function}/#{symbol.arity}` in `#{symbol.file}`\n"
+    end
+  end
+
+  defp render_tier(0), do: :full
+  defp render_tier(1), do: :signature
+  defp render_tier(_index), do: :compact
+
+  defp symbol_heading(symbol, true),
+    do: "#{symbol.module}.#{symbol.function}/#{symbol.arity} [CHANGED]"
+
+  defp symbol_heading(symbol, false), do: "#{symbol.module}.#{symbol.function}/#{symbol.arity}"
 end

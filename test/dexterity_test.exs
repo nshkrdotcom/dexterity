@@ -137,6 +137,123 @@ defmodule DexterityTest do
       {"MyApp.Feature", "run", 1} => []
     }
 
+    @symbol_nodes [
+      %{
+        module: "MyApp.Accounts",
+        function: "register_user",
+        arity: 1,
+        file: "lib/accounts.ex",
+        line: 4,
+        end_line: 4,
+        visibility: :public,
+        signature: "def register_user(attrs)",
+        kind: "def"
+      },
+      %{
+        module: "MyApp.Accounts",
+        function: "unused_helper",
+        arity: 0,
+        file: "lib/accounts.ex",
+        line: 5,
+        end_line: 5,
+        visibility: :public,
+        signature: "def unused_helper()",
+        kind: "def"
+      },
+      %{
+        module: "MyApp.Accounts",
+        function: "test_support_hook",
+        arity: 0,
+        file: "lib/accounts.ex",
+        line: 6,
+        end_line: 6,
+        visibility: :public,
+        signature: "def test_support_hook()",
+        kind: "def"
+      },
+      %{
+        module: "MyApp.Payments",
+        function: "refund_charge",
+        arity: 1,
+        file: "lib/payments.ex",
+        line: 4,
+        end_line: 4,
+        visibility: :public,
+        signature: "def refund_charge(amount)",
+        kind: "def"
+      },
+      %{
+        module: "MyApp.Payments",
+        function: "capture_charge",
+        arity: 1,
+        file: "lib/payments.ex",
+        line: 5,
+        end_line: 5,
+        visibility: :public,
+        signature: "def capture_charge(amount)",
+        kind: "def"
+      },
+      %{
+        module: "MyApp.Feature",
+        function: "run",
+        arity: 1,
+        file: "lib/feature.ex",
+        line: 4,
+        end_line: 6,
+        visibility: :public,
+        signature: "def run(attrs)",
+        kind: "def"
+      },
+      %{
+        module: "MyApp.Feature",
+        function: "bill",
+        arity: 1,
+        file: "lib/feature.ex",
+        line: 8,
+        end_line: 10,
+        visibility: :public,
+        signature: "def bill(amount)",
+        kind: "def"
+      }
+    ]
+
+    @symbol_edges [
+      %{
+        source: %{
+          module: "MyApp.Feature",
+          function: "run",
+          arity: 1,
+          file: "lib/feature.ex",
+          line: 4
+        },
+        target: %{
+          module: "MyApp.Accounts",
+          function: "register_user",
+          arity: 1,
+          file: "lib/accounts.ex",
+          line: 4
+        },
+        weight: 1.0
+      },
+      %{
+        source: %{
+          module: "MyApp.Feature",
+          function: "bill",
+          arity: 1,
+          file: "lib/feature.ex",
+          line: 8
+        },
+        target: %{
+          module: "MyApp.Payments",
+          function: "capture_charge",
+          arity: 1,
+          file: "lib/payments.ex",
+          line: 5
+        },
+        weight: 1.0
+      }
+    ]
+
     @impl true
     def list_file_edges(_repo_root) do
       {:ok,
@@ -186,6 +303,12 @@ defmodule DexterityTest do
 
     @impl true
     def healthy?(_repo_root), do: {:ok, true}
+
+    @impl true
+    def list_symbol_nodes(_repo_root), do: {:ok, @symbol_nodes}
+
+    @impl true
+    def list_symbol_edges(_repo_root), do: {:ok, @symbol_edges}
   end
 
   test "notify_file_changed delegates to injected backend and marks graph stale" do
@@ -510,6 +633,63 @@ defmodule DexterityTest do
     assert Enum.any?(test_only_exports, fn export ->
              export.function == "test_support_hook" and export.file == "lib/accounts.ex"
            end)
+  end
+
+  test "symbol ranking and diff-aware impact context return symbol-level context" do
+    repo_root = runtime_repo_root()
+
+    graph_server =
+      Module.concat(__MODULE__, :"ImpactGraph#{System.unique_integer([:positive])}")
+
+    symbol_graph_server =
+      Module.concat(__MODULE__, :"ImpactSymbolGraph#{System.unique_integer([:positive])}")
+
+    start_supervised!(
+      {GraphServer,
+       [
+         repo_root: repo_root,
+         backend: RuntimeBackend,
+         store_conn: nil,
+         name: graph_server
+       ]}
+    )
+
+    start_supervised!(
+      {Dexterity.SymbolGraphServer,
+       [
+         repo_root: repo_root,
+         backend: RuntimeBackend,
+         name: symbol_graph_server
+       ]}
+    )
+
+    Process.sleep(20)
+
+    assert {:ok, ranked_symbols} =
+             Dexterity.get_ranked_symbols(
+               active_file: "lib/feature.ex",
+               backend: RuntimeBackend,
+               repo_root: repo_root,
+               symbol_graph_server: symbol_graph_server
+             )
+
+    assert Enum.any?(ranked_symbols, fn symbol ->
+             symbol.function == "run" and symbol.module == "MyApp.Feature"
+           end)
+
+    assert {:ok, impact_context} =
+             Dexterity.get_impact_context(
+               changed_files: ["lib/feature.ex"],
+               backend: RuntimeBackend,
+               repo_root: repo_root,
+               graph_server: graph_server,
+               symbol_graph_server: symbol_graph_server,
+               token_budget: 2_000
+             )
+
+    assert impact_context =~ "### MyApp.Feature.run/1 [CHANGED]"
+    assert impact_context =~ "register_user"
+    assert impact_context =~ "capture_charge"
   end
 
   defp runtime_repo_root do

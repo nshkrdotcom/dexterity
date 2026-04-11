@@ -6,6 +6,8 @@ Authoritative public API behavior for Dexterity.
 
 - `get_repo_map(context_opts) :: {:ok, String.t()} | {:error, term()}`
 - `get_ranked_files(context_opts) :: {:ok, [{String.t(), float()}]} | {:error, term()}`
+- `get_ranked_symbols(context_opts) :: {:ok, [map()]} | {:error, term()}`
+- `get_impact_context(context_opts) :: {:ok, String.t()} | {:error, term()}`
 - `get_symbols(file, opts \\\\ []) :: {:ok, [map()]} | {:error, :not_indexed} | {:error, term()}`
 - `find_symbols(query, opts \\\\ []) :: {:ok, [ranked_symbol()]} | {:error, term()}`
 - `match_files(sql_like_pattern, opts \\\\ []) :: {:ok, [String.t()]} | {:error, term()}`
@@ -30,7 +32,10 @@ Authoritative public API behavior for Dexterity.
 `context_opts` may also include:
 - `:conversation_terms`
 - `:conversation_tokens`
+- `:changed_files`
+- `:changed_symbols`
 - `:graph_server`
+- `:symbol_graph_server`
 - `:summary_server`
 - `:store_conn`
 - `:summary_enabled`
@@ -81,7 +86,7 @@ Authoritative public API behavior for Dexterity.
   - `--output PATH`
   - `--backend MODULE`
 - `mix dexterity.query references|definition|blast|cochanges [args]`
-- `mix dexterity.query blast_count|symbols|files|export_analysis|unused_exports|test_only_exports [args]`
+- `mix dexterity.query blast_count|symbols|files|ranked_symbols|impact_context|export_analysis|unused_exports|test_only_exports [args]`
 - `mix dexterity.mcp.serve --repo-root PATH` (production transport)
 
 ## Error and stability contract
@@ -91,6 +96,8 @@ Authoritative public API behavior for Dexterity.
 - Token budgeting in `get_repo_map/1` is bounded by config.
 - `token_budget: :auto` adapts to `:conversation_tokens` while respecting config min/max bounds.
 - Conversation terms can raise the rank of files whose path or source tokens match the current discussion.
+- Symbol ranking uses a separate symbol graph and can spin up a deterministic temporary symbol-graph server when the caller provides a backend/repo pair without a running symbol graph process.
+- Impact context is symbol-oriented and adapts detail level to the token budget instead of rendering whole files only.
 - Export analysis is callback-aware and does not rely only on explicit static references.
 - Runtime confirmation is optional and additive; when no runtime evidence exists, the report falls back to static analysis plus entrypoint inference.
 - Summary reads are cache-backed and only rendered when stored signature and file mtime are current.

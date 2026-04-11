@@ -21,6 +21,8 @@ If you want exact, repeatable codebase context instead of ad hoc grep output, th
 
 - `Dexterity.get_repo_map/1` for ranked, prompt-ready repository context.
 - `Dexterity.get_ranked_files/1` with active-file, edit, and conversation-term ranking inputs.
+- `Dexterity.get_ranked_symbols/1` for symbol-level ranking over the same repo state.
+- `Dexterity.get_impact_context/1` for adaptive, diff-aware symbol context.
 - `Dexterity.get_symbols/2`, `Dexterity.find_symbols/2`, and `Dexterity.match_files/2` for targeted discovery.
 - `Dexterity.get_module_deps/2` and `Dexterity.get_file_blast_radius/2` for impact checks.
 - `Dexterity.get_export_analysis/1`, `Dexterity.get_unused_exports/1`, and `Dexterity.get_test_only_exports/1` for callback-aware export analysis.
@@ -106,6 +108,8 @@ mix dexterity.query blast_count lib/my_app/accounts.ex --repo-root .
 mix dexterity.query cochanges lib/my_app/accounts.ex --repo-root . --limit 10
 mix dexterity.query symbols refund --repo-root .
 mix dexterity.query files '%accounts%' --repo-root .
+mix dexterity.query ranked_symbols --repo-root . --active-file lib/my_app/accounts.ex
+mix dexterity.query impact_context --repo-root . --changed-file lib/my_app/accounts.ex --token-budget 2048
 mix dexterity.query export_analysis --repo-root .
 mix dexterity.query unused_exports --repo-root .
 mix dexterity.query test_only_exports --repo-root .
@@ -156,6 +160,24 @@ mix dexterity.query test_only_exports --repo-root .
     backend: Dexterity.Backend.Dexter
   )
 
+{:ok, ranked_symbols} =
+  Dexterity.get_ranked_symbols(
+    repo_root: "/workspace/my_app",
+    backend: Dexterity.Backend.Dexter,
+    active_file: "lib/my_app/accounts.ex",
+    mentioned_files: ["lib/my_app_web/live/dashboard_live.ex"],
+    limit: 12
+  )
+
+{:ok, impact_context} =
+  Dexterity.get_impact_context(
+    repo_root: "/workspace/my_app",
+    backend: Dexterity.Backend.Dexter,
+    changed_files: ["lib/my_app/accounts.ex"],
+    token_budget: 2048,
+    limit: 12
+  )
+
 {:ok, blast_count} =
   Dexterity.get_file_blast_radius(
     "lib/my_app/accounts.ex",
@@ -175,7 +197,7 @@ mix dexterity.query test_only_exports --repo-root .
   )
 ```
 
-`Dexterity.get_repo_map/1` is the main integration point for agent context. The search and analysis APIs are useful when you want deterministic follow-up queries after a model identifies a symbol or file of interest. `get_export_analysis/1` separates ordinary public API from callback entrypoints and can fold in persisted runtime confirmation from `import_cover_modules/2`.
+`Dexterity.get_repo_map/1` is the main file-level integration point for agent context. `get_ranked_symbols/1` and `get_impact_context/1` sit on top of the symbol graph and are the higher-precision surfaces to use when you already know what changed or which file the model is focused on. `get_export_analysis/1` separates ordinary public API from callback entrypoints and can fold in persisted runtime confirmation from `import_cover_modules/2`.
 
 ## MCP Server
 
@@ -189,6 +211,8 @@ Supported tools include:
 
 - `get_repo_map`
 - `get_ranked_files`
+- `get_ranked_symbols`
+- `get_impact_context`
 - `find_symbols`
 - `match_files`
 - `get_symbols`
@@ -217,6 +241,7 @@ That example shows:
 - live mix-task status, map, and query execution
 - real git-driven cochange ingestion
 - ranked repo map generation with adaptive auto budgeting and conversation-term boosts
+- symbol-level ranking and adaptive impact-context rendering
 - semantic symbol and file lookup
 - definition and reference queries
 - dependency lookup and direct blast radius counts
