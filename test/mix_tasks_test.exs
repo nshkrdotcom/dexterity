@@ -47,10 +47,27 @@ defmodule MixTasksTest do
 
     @impl true
     def list_file_edges(_repo_root),
-      do: {:ok, [{"lib/a.ex", "lib/b.ex", 1.0}, {"lib/b.ex", "lib/c.ex", 0.5}]}
+      do: {:ok, [{"lib/a.ex", "lib/b.ex", 1.0}, {"lib/c.ex", "lib/b.ex", 0.5}]}
 
     @impl true
-    def list_file_nodes(_repo_root), do: {:ok, ["lib/a.ex", "lib/b.ex", "lib/c.ex"]}
+    def list_file_nodes(_repo_root),
+      do: {:ok, ["lib/a.ex", "lib/b.ex", "lib/c.ex", "test/a_test.exs"]}
+
+    @impl true
+    def list_exported_symbols(_repo_root, "lib/a.ex") do
+      {:ok,
+       [
+         %{module: "MyModule", function: "call", arity: 1, file: "lib/a.ex", line: 3},
+         %{module: "MyModule", function: "unused_helper", arity: 0, file: "lib/a.ex", line: 6},
+         %{module: "MyModule", function: "test_support", arity: 0, file: "lib/a.ex", line: 9}
+       ]}
+    end
+
+    @impl true
+    def list_exported_symbols(_repo_root, "lib/b.ex") do
+      {:ok,
+       [%{module: "Searchable", function: "register_user", arity: 1, file: "lib/b.ex", line: 4}]}
+    end
 
     @impl true
     def list_exported_symbols(_repo_root, _file), do: {:ok, []}
@@ -65,6 +82,17 @@ defmodule MixTasksTest do
     @impl true
     def find_references(_repo_root, "MyModule", nil, nil),
       do: {:ok, [%{file: "lib/caller.ex", line: 4}]}
+
+    @impl true
+    def find_references(_repo_root, "MyModule", "unused_helper", 0),
+      do: {:ok, [%{file: "lib/a.ex", line: 12}]}
+
+    @impl true
+    def find_references(_repo_root, "MyModule", "test_support", 0),
+      do: {:ok, [%{file: "test/a_test.exs", line: 5}]}
+
+    @impl true
+    def find_references(_repo_root, "Searchable", "register_user", 1), do: {:ok, []}
 
     @impl true
     def find_references(_repo_root, _module, _function, _arity), do: {:ok, []}
@@ -245,6 +273,54 @@ defmodule MixTasksTest do
       end)
 
     assert cochanges =~ "lib/b.ex"
+    stop_app_if_running()
+  end
+
+  test "dexterity.query symbols/files/blast_count/unused_exports/test_only_exports surfaces" do
+    backend = QueryTaskBackend
+
+    symbols =
+      capture_io(fn ->
+        Query.run(["symbols", "register", "--backend", inspect(backend), "--repo-root", "tmp"])
+      end)
+
+    assert symbols =~ "register_user"
+
+    files =
+      capture_io(fn ->
+        Query.run(["files", "%a%", "--backend", inspect(backend), "--repo-root", "tmp"])
+      end)
+
+    assert files =~ "lib/a.ex"
+    assert files =~ "test/a_test.exs"
+
+    blast_count =
+      capture_io(fn ->
+        Query.run([
+          "blast_count",
+          "lib/b.ex",
+          "--backend",
+          inspect(backend),
+          "--repo-root",
+          "tmp"
+        ])
+      end)
+
+    assert blast_count =~ "2"
+
+    unused =
+      capture_io(fn ->
+        Query.run(["unused_exports", "--backend", inspect(backend), "--repo-root", "tmp"])
+      end)
+
+    assert unused =~ "unused_helper"
+
+    test_only =
+      capture_io(fn ->
+        Query.run(["test_only_exports", "--backend", inspect(backend), "--repo-root", "tmp"])
+      end)
+
+    assert test_only =~ "test_support"
     stop_app_if_running()
   end
 

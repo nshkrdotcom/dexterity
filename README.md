@@ -20,7 +20,10 @@ If you want exact, repeatable codebase context instead of ad hoc grep output, th
 ## What You Get
 
 - `Dexterity.get_repo_map/1` for ranked, prompt-ready repository context.
-- `Dexterity.get_symbols/2` and `Dexterity.get_module_deps/2` for targeted lookups.
+- `Dexterity.get_ranked_files/1` with active-file, edit, and conversation-term ranking inputs.
+- `Dexterity.get_symbols/2`, `Dexterity.find_symbols/2`, and `Dexterity.match_files/2` for targeted discovery.
+- `Dexterity.get_module_deps/2` and `Dexterity.get_file_blast_radius/2` for impact checks.
+- `Dexterity.get_unused_exports/1` and `Dexterity.get_test_only_exports/1` for dead-code style export analysis.
 - `Dexterity.Query` for definitions, references, blast radius, and cochange neighbors.
 - Mix tasks for indexing, status, map rendering, and query execution.
 - Optional MCP transport over stdio for editor and agent integrations.
@@ -97,7 +100,12 @@ Run semantic queries:
 mix dexterity.query definition MyApp.Accounts register 2 --repo-root .
 mix dexterity.query references MyApp.Accounts register 2 --repo-root .
 mix dexterity.query blast lib/my_app/accounts.ex --repo-root . --depth 2
+mix dexterity.query blast_count lib/my_app/accounts.ex --repo-root .
 mix dexterity.query cochanges lib/my_app/accounts.ex --repo-root . --limit 10
+mix dexterity.query symbols refund --repo-root .
+mix dexterity.query files '%accounts%' --repo-root .
+mix dexterity.query unused_exports --repo-root .
+mix dexterity.query test_only_exports --repo-root .
 ```
 
 ## Using The Library In Code
@@ -109,7 +117,9 @@ mix dexterity.query cochanges lib/my_app/accounts.ex --repo-root . --limit 10
     backend: Dexterity.Backend.Dexter,
     active_file: "lib/my_app/accounts.ex",
     mentioned_files: ["lib/my_app_web/live/dashboard_live.ex"],
-    token_budget: 4096,
+    conversation_terms: ["refund"],
+    conversation_tokens: 120_000,
+    token_budget: :auto,
     limit: 20
   )
 
@@ -128,9 +138,35 @@ mix dexterity.query cochanges lib/my_app/accounts.ex --repo-root . --limit 10
     repo_root: "/workspace/my_app",
     backend: Dexterity.Backend.Dexter
   )
+
+{:ok, ranked_symbol_hits} =
+  Dexterity.find_symbols(
+    "refund",
+    repo_root: "/workspace/my_app",
+    backend: Dexterity.Backend.Dexter
+  )
+
+{:ok, indexed_account_files} =
+  Dexterity.match_files(
+    "%accounts%",
+    repo_root: "/workspace/my_app",
+    backend: Dexterity.Backend.Dexter
+  )
+
+{:ok, blast_count} =
+  Dexterity.get_file_blast_radius(
+    "lib/my_app/accounts.ex",
+    repo_root: "/workspace/my_app"
+  )
+
+{:ok, unused_exports} =
+  Dexterity.get_unused_exports(
+    repo_root: "/workspace/my_app",
+    backend: Dexterity.Backend.Dexter
+  )
 ```
 
-`Dexterity.get_repo_map/1` is the main integration point for agent context. The other APIs are useful when you want deterministic follow-up queries after a model identifies a symbol or file of interest.
+`Dexterity.get_repo_map/1` is the main integration point for agent context. The search and analysis APIs are useful when you want deterministic follow-up queries after a model identifies a symbol or file of interest.
 
 ## MCP Server
 
@@ -144,7 +180,12 @@ Supported tools include:
 
 - `get_repo_map`
 - `get_ranked_files`
+- `find_symbols`
+- `match_files`
 - `get_symbols`
+- `get_file_blast_radius`
+- `get_unused_exports`
+- `get_test_only_exports`
 - `get_module_deps`
 - `query_definition`
 - `query_references`
@@ -165,12 +206,12 @@ That example shows:
 - real Dexter indexing through `mix dexterity.index`
 - live mix-task status, map, and query execution
 - real git-driven cochange ingestion
-- ranked repo map generation
-- semantic symbol lookup
+- ranked repo map generation with adaptive auto budgeting and conversation-term boosts
+- semantic symbol and file lookup
 - definition and reference queries
-- dependency lookup
-- blast radius
+- dependency lookup and direct blast radius counts
 - cochange enrichment
+- unused-export and test-only-export analysis
 - real file reindexing
 - live MCP JSON-RPC requests
 

@@ -59,6 +59,18 @@ defmodule Examples.ComprehensiveRealBackend do
 
       IO.inspect(filter_project_files(ranked), pretty: true)
 
+      print_heading("Term-Aware Ranked Files")
+
+      ranked_with_terms =
+        Dexterity.get_ranked_files(
+          active_file: "lib/my_app_web/live/dashboard_live.ex",
+          mentioned_files: ["lib/my_app/accounts.ex"],
+          conversation_terms: ["refund"],
+          limit: 20
+        )
+
+      IO.inspect(filter_project_files(ranked_with_terms), pretty: true)
+
       print_heading("Status")
       IO.inspect(Dexterity.status(), pretty: true)
 
@@ -69,8 +81,10 @@ defmodule Examples.ComprehensiveRealBackend do
           active_file: "lib/my_app_web/live/dashboard_live.ex",
           mentioned_files: ["lib/my_app/accounts.ex"],
           edited_files: ["test/support/data_case.ex"],
+          conversation_terms: ["refund", "support"],
+          conversation_tokens: 150_000,
           limit: 5,
-          token_budget: 3_000,
+          token_budget: :auto,
           include_clones: true
         )
 
@@ -88,6 +102,15 @@ defmodule Examples.ComprehensiveRealBackend do
       print_heading("Module Dependencies")
       IO.inspect(Dexterity.get_module_deps("lib/my_app/accounts.ex"), pretty: true)
 
+      print_heading("Symbol Search")
+      IO.inspect(Dexterity.find_symbols("refund"), pretty: true)
+
+      print_heading("Indexed File Match")
+      IO.inspect(Dexterity.match_files("%accounts%"), pretty: true)
+
+      print_heading("Direct Blast Radius")
+      IO.inspect(Dexterity.get_file_blast_radius("lib/my_app/accounts.ex"), pretty: true)
+
       print_heading("Blast Radius")
 
       IO.inspect(Query.blast_radius("lib/my_app_web/live/dashboard_live.ex", depth: 2),
@@ -96,6 +119,12 @@ defmodule Examples.ComprehensiveRealBackend do
 
       print_heading("Cochanges")
       IO.inspect(Query.cochanges("lib/my_app/accounts.ex", 5), pretty: true)
+
+      print_heading("Unused Exports")
+      IO.inspect(Dexterity.get_unused_exports(), pretty: true)
+
+      print_heading("Test-Only Exports")
+      IO.inspect(Dexterity.get_test_only_exports(), pretty: true)
 
       print_heading("Real Reindex")
       touch_live_view!(repo_root)
@@ -208,15 +237,33 @@ defmodule Examples.ComprehensiveRealBackend do
         def get_user!(id) do
           Repo.get!(User, id)
         end
+
+        def test_support_user(id) do
+          get_user!(id)
+        end
+      end
+      """,
+      "lib/my_app/payments.ex" => """
+      defmodule MyApp.Payments do
+        @moduledoc "Billing and refund entry points for the example repo."
+
+        def capture_charge(amount_cents) do
+          {:captured, amount_cents}
+        end
+
+        def refund_charge(amount_cents) do
+          {:refunded, amount_cents}
+        end
       end
       """,
       "lib/my_app_web/live/dashboard_live.ex" => """
       defmodule MyAppWeb.DashboardLive do
         use Phoenix.LiveView
-        alias MyApp.Accounts
+        alias MyApp.{Accounts, Payments}
 
         def mount(_params, _session, socket) do
           user = Accounts.register_user(%{email: "person@example.com"})
+          Payments.capture_charge(500)
           {:ok, assign(socket, :user, user)}
         end
       end
@@ -227,8 +274,18 @@ defmodule Examples.ComprehensiveRealBackend do
         alias MyApp.{Accounts, Repo, User}
 
         def build_user(id) do
-          Accounts.get_user!(id)
+          Accounts.test_support_user(id)
           Repo.get!(User, id)
+        end
+      end
+      """,
+      "test/my_app/accounts_test.exs" => """
+      defmodule MyApp.AccountsTest do
+        use ExUnit.Case
+        alias MyApp.Accounts
+
+        test "test helper stays reachable" do
+          assert %{id: 1} = Accounts.test_support_user(1)
         end
       end
       """
@@ -342,6 +399,49 @@ defmodule Examples.ComprehensiveRealBackend do
       "--limit",
       "5"
     ])
+
+    print_heading("Mix Task: dexterity.query symbols")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "symbols",
+      "refund",
+      "--repo-root",
+      repo_root
+    ])
+
+    print_heading("Mix Task: dexterity.query files")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "files",
+      "%accounts%",
+      "--repo-root",
+      repo_root
+    ])
+
+    print_heading("Mix Task: dexterity.query blast_count")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "blast_count",
+      "lib/my_app/accounts.ex",
+      "--repo-root",
+      repo_root
+    ])
+
+    print_heading("Mix Task: dexterity.query unused_exports")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "unused_exports",
+      "--repo-root",
+      repo_root
+    ])
+
+    print_heading("Mix Task: dexterity.query test_only_exports")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "test_only_exports",
+      "--repo-root",
+      repo_root
+    ])
   end
 
   defp run_mcp_demo(repo_root) do
@@ -386,6 +486,30 @@ defmodule Examples.ComprehensiveRealBackend do
           "token_budget" => 2048,
           "limit" => 5
         }
+      }
+    }, context)
+
+    print_heading("MCP tools/call find_symbols")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 5,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "find_symbols",
+        "arguments" => %{"query" => "refund"}
+      }
+    }, context)
+
+    print_heading("MCP tools/call get_unused_exports")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 6,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_unused_exports",
+        "arguments" => %{}
       }
     }, context)
   end

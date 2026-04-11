@@ -16,9 +16,14 @@ defmodule Dexterity.MCP do
     {"query_definition", "Find symbol definitions"},
     {"query_blast", "Find blast radius"},
     {"query_cochanges", "Find file co-change neighbors"},
+    {"find_symbols", "Search exported symbols across indexed files"},
+    {"match_files", "Match indexed file paths with SQL LIKE wildcards"},
+    {"get_file_blast_radius", "Count direct dependents for a file"},
     {"get_ranked_files", "Get ranked files list"},
     {"get_repo_map", "Get rendered ranked repo map"},
     {"get_symbols", "Get exported symbols for a file"},
+    {"get_unused_exports", "Find exports with no external references"},
+    {"get_test_only_exports", "Find exports referenced only by tests"},
     {"get_module_deps", "Get module dependencies"},
     {"status", "Get runtime status snapshot"}
   ]
@@ -193,6 +198,31 @@ defmodule Dexterity.MCP do
     |> call_result()
   end
 
+  defp dispatch_tool("find_symbols", params, context) do
+    query = get_required(params, "query")
+    limit = parse_integer(get_optional(params, "limit"), fallback: 10)
+    opts = Keyword.put(analysis_opts(params, context), :limit, limit)
+
+    Elixir.Dexterity.find_symbols(query, opts)
+    |> call_result()
+  end
+
+  defp dispatch_tool("match_files", params, context) do
+    pattern = get_required(params, "pattern")
+    limit = parse_integer(get_optional(params, "limit"), fallback: 20)
+    opts = Keyword.put(analysis_opts(params, context), :limit, limit)
+
+    Elixir.Dexterity.match_files(pattern, opts)
+    |> call_result()
+  end
+
+  defp dispatch_tool("get_file_blast_radius", params, context) do
+    file = get_required(params, "file")
+
+    Elixir.Dexterity.get_file_blast_radius(file, analysis_opts(params, context))
+    |> call_result()
+  end
+
   defp dispatch_tool("get_ranked_files", params, context) do
     opts = map_query_opts(params, context)
 
@@ -214,6 +244,19 @@ defmodule Dexterity.MCP do
     opts = tool_opts(params, context)
 
     Elixir.Dexterity.get_symbols(file, opts)
+    |> call_result()
+  end
+
+  defp dispatch_tool("get_unused_exports", params, context) do
+    limit = parse_integer(get_optional(params, "limit"), fallback: 500)
+    opts = Keyword.put(analysis_opts(params, context), :limit, limit)
+
+    Elixir.Dexterity.get_unused_exports(opts)
+    |> call_result()
+  end
+
+  defp dispatch_tool("get_test_only_exports", params, context) do
+    Elixir.Dexterity.get_test_only_exports(analysis_opts(params, context))
     |> call_result()
   end
 
@@ -255,6 +298,11 @@ defmodule Dexterity.MCP do
     [repo_root: repo_root, backend: backend]
   end
 
+  defp analysis_opts(params, context) do
+    tool_opts(params, context)
+    |> Keyword.put(:graph_server, context.graph_server)
+  end
+
   defp map_query_opts(params, context) do
     active_file = get_optional(params, "active_file") || get_optional(params, "activeFile")
 
@@ -266,10 +314,16 @@ defmodule Dexterity.MCP do
     edited_files =
       parse_file_list(get_optional(params, "edited_files") || get_optional(params, "editedFiles"))
 
+    conversation_terms =
+      parse_file_list(
+        get_optional(params, "conversation_terms") || get_optional(params, "conversationTerms")
+      )
+
     repo_root = get_optional(params, "repo_root") || context.repo_root
     backend = safe_module(get_optional(params, "backend"), context.backend)
     limit = parse_integer(get_optional(params, "limit"), fallback: 25)
     token_budget = get_optional(params, "token_budget")
+    conversation_tokens = get_optional(params, "conversation_tokens")
     min_rank = parse_float(get_optional(params, "min_rank"), fallback: 0.0)
 
     include_clones =
@@ -285,11 +339,20 @@ defmodule Dexterity.MCP do
       include_clones: include_clones,
       active_file: active_file,
       mentioned_files: mentioned_files,
-      edited_files: edited_files
+      edited_files: edited_files,
+      conversation_terms: conversation_terms,
+      graph_server: context.graph_server
     ]
 
-    if token_budget != nil do
-      Keyword.put(opts, :token_budget, parse_integer(token_budget, fallback: :auto))
+    opts =
+      if token_budget != nil do
+        Keyword.put(opts, :token_budget, parse_integer(token_budget, fallback: :auto))
+      else
+        opts
+      end
+
+    if conversation_tokens != nil do
+      Keyword.put(opts, :conversation_tokens, parse_integer(conversation_tokens, fallback: nil))
     else
       opts
     end

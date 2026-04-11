@@ -5,18 +5,37 @@ defmodule Dexterity.MCPTest do
   defmodule StubBackend do
     @behaviour Dexterity.Backend
 
+    @symbols %{
+      "lib/a.ex" => [
+        %{module: "A", function: "foo", arity: 1, file: "lib/a.ex", line: 1},
+        %{module: "A", function: "unused", arity: 0, file: "lib/a.ex", line: 3},
+        %{module: "A", function: "test_only", arity: 0, file: "lib/a.ex", line: 5}
+      ],
+      "test/a_test.exs" => []
+    }
+
     @impl true
     def list_file_edges(_repo_root), do: {:ok, []}
 
     @impl true
-    def list_file_nodes(_repo_root), do: {:ok, []}
+    def list_file_nodes(_repo_root), do: {:ok, Map.keys(@symbols)}
 
     @impl true
-    def list_exported_symbols(_repo_root, _file),
-      do: {:ok, [%{module: "A", function: "foo", arity: 1, file: "lib/a.ex", line: 1}]}
+    def list_exported_symbols(_repo_root, file), do: {:ok, Map.get(@symbols, file, [])}
 
     @impl true
     def find_definition(_repo_root, _module, _function, _arity), do: {:ok, []}
+
+    @impl true
+    def find_references(_repo_root, "A", "foo", 1),
+      do: {:ok, [%{file: "lib/consumer.ex", line: 2}]}
+
+    @impl true
+    def find_references(_repo_root, "A", "unused", 0), do: {:ok, []}
+
+    @impl true
+    def find_references(_repo_root, "A", "test_only", 0),
+      do: {:ok, [%{file: "test/a_test.exs", line: 4}]}
 
     @impl true
     def find_references(_repo_root, _module, _function, _arity), do: {:ok, []}
@@ -72,6 +91,8 @@ defmodule Dexterity.MCPTest do
     assert "get_repo_map" in names
     assert "query_references" in names
     assert "status" in names
+    assert "find_symbols" in names
+    assert "get_unused_exports" in names
   end
 
   test "tools/call delegates to API and returns result payload" do
@@ -92,7 +113,7 @@ defmodule Dexterity.MCPTest do
              Dexterity.MCP.handle_request(request, context())
 
     assert is_list(symbols)
-    assert length(symbols) == 1
+    assert Enum.any?(symbols, &(&1.function == "foo"))
   end
 
   test "invalid json line prints parse error" do
@@ -115,5 +136,52 @@ defmodule Dexterity.MCPTest do
 
     assert {:ok, %{"error" => %{"code" => -32_601, "message" => "method not found"}}} =
              Dexterity.MCP.handle_request(request, context())
+  end
+
+  test "tools/call supports runtime search and export analysis surfaces" do
+    symbol_request = %{
+      "jsonrpc" => "2.0",
+      "id" => 5,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "find_symbols",
+        "arguments" => %{"query" => "foo"}
+      }
+    }
+
+    assert {:ok, %{"result" => %{"result" => [symbol | _]}}} =
+             Dexterity.MCP.handle_request(symbol_request, context())
+
+    assert symbol.function == "foo"
+
+    unused_request = %{
+      "jsonrpc" => "2.0",
+      "id" => 6,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_unused_exports",
+        "arguments" => %{}
+      }
+    }
+
+    assert {:ok, %{"result" => %{"result" => unused_exports}}} =
+             Dexterity.MCP.handle_request(unused_request, context())
+
+    assert Enum.any?(unused_exports, &(&1.function == "unused"))
+
+    test_only_request = %{
+      "jsonrpc" => "2.0",
+      "id" => 7,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_test_only_exports",
+        "arguments" => %{}
+      }
+    }
+
+    assert {:ok, %{"result" => %{"result" => test_only_exports}}} =
+             Dexterity.MCP.handle_request(test_only_request, context())
+
+    assert Enum.any?(test_only_exports, &(&1.function == "test_only"))
   end
 end

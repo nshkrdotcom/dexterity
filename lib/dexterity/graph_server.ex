@@ -97,7 +97,14 @@ defmodule Dexterity.GraphServer do
 
   @impl true
   def handle_call(:get_baseline_rank, _from, state) do
-    {:reply, state.baseline, state}
+    state =
+      if state.stale do
+        rebuild_graph(state)
+      else
+        state
+      end
+
+    {:reply, state.baseline, %{state | stale: false}}
   end
 
   defp init_state(opts) do
@@ -125,16 +132,18 @@ defmodule Dexterity.GraphServer do
   defp compute_scores(state, context_files, opts) do
     context = normalize_context_files(context_files)
     all_files = Enum.uniq(context ++ state.all_files)
-    config_context = Keyword.get(opts, :limit, nil)
+    limit = Keyword.get(opts, :limit, nil)
+    conversation_terms = normalize_conversation_terms(Keyword.get(opts, :conversation_terms, []))
     scores = PageRank.compute(state.graph, context, all_files)
+    boosted_scores = boost_scores(scores, state.metadata, conversation_terms)
 
-    scores
+    boosted_scores
     |> sort_scores()
-    |> maybe_take(config_context)
+    |> maybe_take(limit)
   end
 
   defp sort_scores(scores) do
-    Enum.sort_by(scores, fn {_file, score} -> score end, :desc)
+    Enum.sort_by(scores, fn {file, score} -> {-score, file} end)
   end
 
   defp maybe_take(scores, nil), do: scores
@@ -147,6 +156,57 @@ defmodule Dexterity.GraphServer do
     |> Enum.uniq()
   end
 
+  defp normalize_conversation_terms(nil), do: []
+
+  defp normalize_conversation_terms(terms) when is_binary(terms) do
+    normalize_conversation_terms([terms])
+  end
+
+  defp normalize_conversation_terms(terms) when is_list(terms) do
+    terms
+    |> Enum.flat_map(fn
+      value when is_binary(value) ->
+        Regex.scan(~r/[A-Za-z0-9_!?]+/, String.downcase(value))
+        |> List.flatten()
+
+      _ ->
+        []
+    end)
+    |> Enum.uniq()
+  end
+
+  defp normalize_conversation_terms(_terms), do: []
+
+  defp boost_scores(scores, _metadata, []), do: scores
+
+  defp boost_scores(scores, metadata, conversation_terms) do
+    Map.new(scores, fn {file, score} ->
+      {file, score + term_boost(file, Map.get(metadata, file, %{}), conversation_terms)}
+    end)
+  end
+
+  defp term_boost(file, metadata, conversation_terms) do
+    search_terms =
+      metadata
+      |> Map.get(:search_terms, [])
+      |> MapSet.new()
+
+    file_path = String.downcase(file)
+
+    Enum.reduce(conversation_terms, 0.0, fn term, acc ->
+      cond do
+        String.contains?(file_path, term) ->
+          acc + 0.6
+
+        MapSet.member?(search_terms, term) ->
+          acc + 0.45
+
+        true ->
+          acc
+      end
+    end)
+  end
+
   defp rebuild_graph(state) do
     edges = fetch_file_edges(state)
     cochange_edges = fetch_cochange_edges(state)
@@ -156,6 +216,7 @@ defmodule Dexterity.GraphServer do
 
     merged = merge_edges(edges, cochange_edges, metadata.edges)
     all_files = collect_files(merged, file_nodes ++ Map.keys(metadata.files))
+    enriched_metadata = enrich_metadata(metadata.files, merged, all_files)
 
     sorted_all = Enum.sort(all_files)
     baseline = PageRank.compute(merged, [], sorted_all)
@@ -165,11 +226,32 @@ defmodule Dexterity.GraphServer do
     %{
       state
       | graph: merged,
-        metadata: metadata.files,
+        metadata: enriched_metadata,
         all_files: sorted_all,
         baseline: baseline,
         stale: false
     }
+  end
+
+  defp enrich_metadata(file_metadata, graph, all_files) do
+    blast_radius = incoming_edge_counts(graph)
+
+    Map.new(all_files, fn file ->
+      metadata =
+        file_metadata
+        |> Map.get(file, %{})
+        |> Map.put(:blast_radius, Map.get(blast_radius, file, 0))
+
+      {file, metadata}
+    end)
+  end
+
+  defp incoming_edge_counts(graph) do
+    Enum.reduce(graph, %{}, fn {_source, targets}, acc ->
+      Enum.reduce(Map.keys(targets), acc, fn target, counts ->
+        Map.update(counts, target, 1, &(&1 + 1))
+      end)
+    end)
   end
 
   defp fetch_file_edges(state) do

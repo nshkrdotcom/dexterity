@@ -5,6 +5,7 @@ defmodule Dexterity do
 
   alias Dexterity.Config
   alias Dexterity.GraphServer
+  alias Dexterity.Intelligence
   alias Dexterity.Metadata
   alias Dexterity.Render
   alias Dexterity.Store
@@ -15,6 +16,8 @@ defmodule Dexterity do
           active_file: String.t(),
           mentioned_files: [String.t()],
           edited_files: [String.t()],
+          conversation_terms: [String.t()],
+          conversation_tokens: non_neg_integer(),
           token_budget: pos_integer() | :auto,
           include_clones: boolean(),
           min_rank: float(),
@@ -36,6 +39,24 @@ defmodule Dexterity do
           files: non_neg_integer()
         }
 
+  @type ranked_symbol :: %{
+          module: String.t(),
+          function: String.t(),
+          arity: non_neg_integer(),
+          file: String.t(),
+          line: non_neg_integer(),
+          rank: float()
+        }
+
+  @type unused_export :: %{
+          module: String.t(),
+          function: String.t(),
+          arity: non_neg_integer(),
+          file: String.t(),
+          line: non_neg_integer(),
+          used_internally: boolean()
+        }
+
   @doc """
   Returns ranked and rendered repository context.
   """
@@ -46,13 +67,29 @@ defmodule Dexterity do
     graph_server = Keyword.get(opts, :graph_server, GraphServer)
     budget = Keyword.get(opts, :token_budget, :auto)
     {min_budget, default_budget, max_budget} = Config.token_budget_range()
-    budget = clamp_budget(budget, min_budget, max_budget, default_budget)
+
+    budget =
+      clamp_budget(
+        budget,
+        min_budget,
+        max_budget,
+        default_budget,
+        Keyword.get(opts, :conversation_tokens)
+      )
+
     limit = Keyword.get(opts, :limit, 25)
     include_clones = Keyword.get(opts, :include_clones, Config.fetch(:include_clones))
 
     context_files = context_files(opts)
+    conversation_terms = Keyword.get(opts, :conversation_terms, [])
 
-    with {:ok, ranked} <- GraphServer.get_repo_map(graph_server, context_files, limit: limit),
+    with {:ok, ranked} <-
+           GraphServer.get_repo_map(
+             graph_server,
+             context_files,
+             limit: limit,
+             conversation_terms: conversation_terms
+           ),
          {:ok, ranked_list} <- normalize_ranked(ranked, Keyword.get(opts, :min_rank, 0.0)),
          {:ok, metadata} <- fetch_metadata(graph_server),
          {:ok, symbols} <- fetch_symbols(backend, repo_root, ranked_list),
@@ -67,17 +104,56 @@ defmodule Dexterity do
   """
   @spec get_ranked_files(context_opts()) :: {:ok, [{String.t(), float()}]} | {:error, term()}
   def get_ranked_files(opts \\ []) do
+    graph_server = Keyword.get(opts, :graph_server, GraphServer)
     limit = Keyword.get(opts, :limit, 200)
 
     context_files = context_files(opts)
+    conversation_terms = Keyword.get(opts, :conversation_terms, [])
 
-    with {:ok, ranked} <- GraphServer.get_repo_map(GraphServer, context_files, limit: limit),
+    with {:ok, ranked} <-
+           GraphServer.get_repo_map(
+             graph_server,
+             context_files,
+             limit: limit,
+             conversation_terms: conversation_terms
+           ),
          {:ok, ranked_list} <- normalize_ranked(ranked, Keyword.get(opts, :min_rank, 0.0)) do
       {:ok, ranked_list}
     else
       {:error, reason} -> {:error, reason}
     end
   end
+
+  @doc """
+  Searches exported symbols across indexed files.
+  """
+  @spec find_symbols(String.t(), keyword()) :: {:ok, [ranked_symbol()]} | {:error, term()}
+  def find_symbols(query, opts \\ []), do: Intelligence.find_symbols(query, opts)
+
+  @doc """
+  Matches indexed file paths with SQL LIKE style wildcards.
+  """
+  @spec match_files(String.t(), keyword()) :: {:ok, [String.t()]} | {:error, term()}
+  def match_files(pattern, opts \\ []), do: Intelligence.match_files(pattern, opts)
+
+  @doc """
+  Returns the direct blast radius count for a file.
+  """
+  @spec get_file_blast_radius(String.t(), keyword()) ::
+          {:ok, non_neg_integer()} | {:error, :graph_unavailable}
+  def get_file_blast_radius(file, opts \\ []), do: Intelligence.blast_radius_count(file, opts)
+
+  @doc """
+  Finds exported functions with no external references.
+  """
+  @spec get_unused_exports(keyword()) :: {:ok, [unused_export()]} | {:error, term()}
+  def get_unused_exports(opts \\ []), do: Intelligence.unused_exports(opts)
+
+  @doc """
+  Finds exported functions referenced only by tests.
+  """
+  @spec get_test_only_exports(keyword()) :: {:ok, [map()]} | {:error, term()}
+  def get_test_only_exports(opts \\ []), do: Intelligence.test_only_exports(opts)
 
   @doc """
   Returns outbound and inbound dependencies for a file.
@@ -399,11 +475,23 @@ defmodule Dexterity do
     end
   end
 
-  defp clamp_budget(:auto, _, _, default), do: default
+  defp clamp_budget(:auto, min, max, default, nil),
+    do: clamp_budget(default, min, max, default, nil)
 
-  defp clamp_budget(budget, min, max, _) when is_integer(budget) do
+  defp clamp_budget(:auto, min, max, default, conversation_tokens)
+       when is_integer(conversation_tokens) and conversation_tokens >= 1_000 do
+    saturation = max(Config.fetch(:token_budget_saturation_tokens, 65_536), 1)
+    scale = max(0.6, 1.0 - conversation_tokens / saturation * 0.4)
+    budget = round(min + (max - min) * scale)
+    clamp_budget(budget, min, max, default, nil)
+  end
+
+  defp clamp_budget(:auto, min, max, default, _conversation_tokens),
+    do: clamp_budget(default, min, max, default, nil)
+
+  defp clamp_budget(budget, min, max, _default, _conversation_tokens) when is_integer(budget) do
     min(max, max(min, budget))
   end
 
-  defp clamp_budget(_, _, _, default), do: default
+  defp clamp_budget(_, _min, _max, default, _conversation_tokens), do: default
 end

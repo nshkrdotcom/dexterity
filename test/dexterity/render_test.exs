@@ -71,4 +71,19 @@ defmodule Dexterity.RenderTest do
     assert output =~ "[CLONE of lib/notifications/email.ex, similarity: 0.91]"
     refute output =~ "MyApp.Notifications.EmailCopy"
   end
+
+  test "renders blast radius and recency tags in file headings" do
+    ranked_files = [{"lib/recent.ex", 0.11}, {"lib/stable.ex", 0.07}]
+
+    metadata = %{
+      "lib/recent.ex" => %{blast_radius: 3, mtime: System.os_time(:second)},
+      "lib/stable.ex" => %{blast_radius: 0, mtime: 1}
+    }
+
+    output = Render.render_files(ranked_files, %{}, %{}, %{}, metadata, 1_000)
+
+    assert output =~ "## lib/recent.ex (→3) [NEW]"
+    assert output =~ "## lib/stable.ex"
+    refute output =~ "## lib/stable.ex [NEW]"
+  end
 end

@@ -37,7 +37,12 @@ Renders map text to stdout or writes to file.
 - `references MODULE [FUNCTION] [ARITY]`
 - `definition MODULE [FUNCTION] [ARITY]`
 - `blast FILE [--depth N]`
+- `blast_count FILE`
 - `cochanges FILE [--limit N]`
+- `symbols QUERY [--limit N]`
+- `files SQL_LIKE_PATTERN [--limit N]`
+- `unused_exports [--limit N]`
+- `test_only_exports`
 
 `depth` defaults to `2`; `limit` defaults to `25`.
 

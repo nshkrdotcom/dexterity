@@ -41,7 +41,7 @@ defmodule Dexterity.Render do
 
   defp render_file(file, score, symbols, summary, clone_of, metadata) do
     base =
-      ["## #{file}", "- rank: #{Float.round(score, 6)}"]
+      ["## #{file_heading(file, metadata)}", "- rank: #{Float.round(score, 6)}"]
       |> Enum.join("\n")
 
     metadata_lines =
@@ -73,10 +73,34 @@ defmodule Dexterity.Render do
       end
 
     content =
-      Enum.join([base, clone_line(clone_of), metadata_lines, summary_text, symbol_lines], "\n")
+      ([base] ++ clone_line(clone_of) ++ metadata_lines ++ summary_text ++ symbol_lines)
+      |> Enum.join("\n")
 
     "\n#{content}\n"
   end
+
+  defp file_heading(file, metadata) do
+    file <>
+      blast_radius_tag(Map.get(metadata, :blast_radius, 0)) <>
+      recency_tag(Map.get(metadata, :mtime))
+  end
+
+  defp blast_radius_tag(radius) when is_integer(radius) and radius > 0, do: " (→#{radius})"
+  defp blast_radius_tag(_radius), do: ""
+
+  defp recency_tag(nil), do: ""
+
+  defp recency_tag(mtime) when is_integer(mtime) do
+    recent_cutoff = System.os_time(:second) - 48 * 60 * 60
+
+    if mtime >= recent_cutoff do
+      " [NEW]"
+    else
+      ""
+    end
+  end
+
+  defp recency_tag(_mtime), do: ""
 
   defp append_annotation(lines, _label, []), do: lines
 

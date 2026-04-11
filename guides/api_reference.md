@@ -7,7 +7,12 @@ Authoritative public API behavior for Dexterity.
 - `get_repo_map(context_opts) :: {:ok, String.t()} | {:error, term()}`
 - `get_ranked_files(context_opts) :: {:ok, [{String.t(), float()}]} | {:error, term()}`
 - `get_symbols(file, opts \\\\ []) :: {:ok, [map()]} | {:error, :not_indexed} | {:error, term()}`
+- `find_symbols(query, opts \\\\ []) :: {:ok, [ranked_symbol()]} | {:error, term()}`
+- `match_files(sql_like_pattern, opts \\\\ []) :: {:ok, [String.t()]} | {:error, term()}`
 - `get_module_deps(file, opts \\\\ []) :: {:ok, %{dependencies: [String.t()], dependents: [String.t()]}} | {:error, :graph_unavailable | term()}`
+- `get_file_blast_radius(file, opts \\\\ []) :: {:ok, non_neg_integer()} | {:error, term()}`
+- `get_unused_exports(opts \\\\ []) :: {:ok, [unused_export()]} | {:error, term()}`
+- `get_test_only_exports(opts \\\\ []) :: {:ok, [map()]} | {:error, term()}`
 - `notify_file_changed(file, opts \\\\ []) :: :ok | {:error, term()}`
 - `status() :: {:ok, status_snapshot()} | {:error, term()}`
 
@@ -20,6 +25,8 @@ Authoritative public API behavior for Dexterity.
 - `:files`
 
 `context_opts` may also include:
+- `:conversation_terms`
+- `:conversation_tokens`
 - `:graph_server`
 - `:summary_server`
 - `:store_conn`
@@ -63,6 +70,7 @@ Authoritative public API behavior for Dexterity.
   - `--output PATH`
   - `--backend MODULE`
 - `mix dexterity.query references|definition|blast|cochanges [args]`
+- `mix dexterity.query blast_count|symbols|files|unused_exports|test_only_exports [args]`
 - `mix dexterity.mcp.serve --repo-root PATH` (production transport)
 
 ## Error and stability contract
@@ -70,6 +78,8 @@ Authoritative public API behavior for Dexterity.
 - Explicit error tuples are preferred over silent fallback.
 - Ranking and rendering are deterministic for fixed inputs.
 - Token budgeting in `get_repo_map/1` is bounded by config.
+- `token_budget: :auto` adapts to `:conversation_tokens` while respecting config min/max bounds.
+- Conversation terms can raise the rank of files whose path or source tokens match the current discussion.
 - Summary reads are cache-backed and only rendered when stored signature and file mtime are current.
 - Clone annotations are deterministic and suppress duplicate symbol bodies for lower-ranked matches.
 - MCP responses include `jsonrpc` and `error` payloads for non-recoverable calls.

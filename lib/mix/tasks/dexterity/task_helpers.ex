@@ -19,6 +19,10 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
 
   @spec ensure_started!() :: :ok
   def ensure_started! do
+    if Process.whereis(Dexterity.Supervisor) do
+      Application.stop(:dexterity)
+    end
+
     Mix.Task.reenable("app.start")
     Mix.Task.run("app.start", [])
     :ok

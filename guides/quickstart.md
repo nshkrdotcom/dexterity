@@ -33,8 +33,19 @@ That example uses a real `dexter` binary, a real temporary `.dexter.db`, real gi
 
 ```elixir
 # Build the map for one request
-{:ok, map} = Dexterity.get_repo_map(active_file: "lib/my_app.ex", token_budget: 2048, limit: 20)
+{:ok, map} =
+  Dexterity.get_repo_map(
+    active_file: "lib/my_app.ex",
+    conversation_terms: ["refund"],
+    conversation_tokens: 120_000,
+    token_budget: :auto,
+    limit: 20
+  )
+
 {:ok, ranked} = Dexterity.get_ranked_files(limit: 20, repo_root: ".", backend: Dexterity.Backend.Dexter)
+{:ok, symbols} = Dexterity.find_symbols("refund", repo_root: ".", backend: Dexterity.Backend.Dexter)
+{:ok, files} = Dexterity.match_files("%accounts%", repo_root: ".", backend: Dexterity.Backend.Dexter)
+{:ok, blast_count} = Dexterity.get_file_blast_radius("lib/my_app.ex", repo_root: ".")
 {:ok, refs} = Dexterity.Query.find_references("MyApp.Accounts", "register", 2, backend: Dexterity.Backend.Dexter)
 ```
 
@@ -45,6 +56,8 @@ mix dexterity.index --repo-root .
 mix dexterity.status --repo-root .
 mix dexterity.map --active-file lib/my_app.ex --limit 20 --token-budget 2048
 mix dexterity.query references MyApp.Accounts register 2
+mix dexterity.query symbols refund
+mix dexterity.query unused_exports
 ```
 
 ## Error handling posture

@@ -9,7 +9,10 @@ defmodule Dexterity.Metadata do
           protocol_implementations: [String.t()],
           injected_by: [String.t()],
           sibling_implementations: [String.t()],
-          clone_tokens: [String.t()]
+          clone_tokens: [String.t()],
+          search_terms: [String.t()],
+          mtime: integer(),
+          blast_radius: non_neg_integer()
         }
 
   @spec build(String.t(), [String.t()]) :: %{
@@ -99,10 +102,12 @@ defmodule Dexterity.Metadata do
   def summary_entry(nil, _symbols), do: nil
 
   def summary_entry(metadata, symbols) do
+    modules = Map.get(metadata, :modules, [])
+
     module_name =
       case symbols do
         [%{module: module_name} | _] when is_binary(module_name) -> module_name
-        _ -> List.first(metadata.modules)
+        _ -> List.first(modules)
       end
 
     if is_binary(module_name) do
@@ -113,7 +118,7 @@ defmodule Dexterity.Metadata do
 
       context = %{
         module: module_name,
-        moduledoc: metadata.moduledoc,
+        moduledoc: Map.get(metadata, :moduledoc),
         exports: exports
       }
 
@@ -130,7 +135,7 @@ defmodule Dexterity.Metadata do
   def clone_signature(nil), do: nil
 
   def clone_signature(metadata) do
-    case metadata.clone_tokens do
+    case Map.get(metadata, :clone_tokens, []) do
       [] -> nil
       tokens -> :erlang.term_to_binary(tokens)
     end
@@ -138,11 +143,11 @@ defmodule Dexterity.Metadata do
 
   @spec clone_tokens(file_metadata() | nil) :: [String.t()]
   def clone_tokens(nil), do: []
-  def clone_tokens(metadata), do: metadata.clone_tokens
+  def clone_tokens(metadata), do: Map.get(metadata, :clone_tokens, [])
 
   @spec primary_module(file_metadata() | nil, String.t()) :: String.t()
   def primary_module(nil, file), do: file
-  def primary_module(metadata, file), do: List.first(metadata.modules) || file
+  def primary_module(metadata, file), do: List.first(Map.get(metadata, :modules, [])) || file
 
   defp group_implementations(file_metadata, key) do
     Enum.reduce(file_metadata, %{}, fn {file, metadata}, acc ->
@@ -209,16 +214,21 @@ defmodule Dexterity.Metadata do
 
     if File.regular?(path) do
       source = File.read!(path)
+      mtime = file_mtime(path)
 
       case Code.string_to_quoted(source, file: path, emit_warnings: false) do
         {:ok, ast} ->
           ast
           |> collect_metadata()
           |> Map.put(:clone_tokens, clone_tokens_from_ast(ast))
+          |> Map.put(:search_terms, tokenize(source))
+          |> Map.put(:mtime, mtime)
 
         {:error, _reason} ->
           empty_metadata()
           |> Map.put(:clone_tokens, tokenize(source))
+          |> Map.put(:search_terms, tokenize(source))
+          |> Map.put(:mtime, mtime)
       end
     else
       empty_metadata()
@@ -308,6 +318,13 @@ defmodule Dexterity.Metadata do
   defp normalize_doc(value) when is_binary(value), do: value
   defp normalize_doc(_value), do: nil
 
+  defp file_mtime(path) do
+    case File.stat(path, time: :posix) do
+      {:ok, stat} -> stat.mtime
+      _ -> 0
+    end
+  end
+
   defp empty_metadata do
     %{
       modules: [],
@@ -317,7 +334,10 @@ defmodule Dexterity.Metadata do
       protocol_implementations: [],
       injected_by: [],
       sibling_implementations: [],
-      clone_tokens: []
+      clone_tokens: [],
+      search_terms: [],
+      mtime: 0,
+      blast_radius: 0
     }
   end
 end
