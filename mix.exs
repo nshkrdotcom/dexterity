@@ -42,7 +42,11 @@ defmodule Dexterity.MixProject do
 
   defp deps do
     [
-      {:ex_doc, "~> 0.31", only: :dev, runtime: false}
+      {:exqlite, "~> 0.28"},
+      {:file_system, "~> 1.0"},
+      {:nx, "~> 0.9", optional: true},
+      {:tiktoken, "~> 0.4", optional: true},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
   end
 
