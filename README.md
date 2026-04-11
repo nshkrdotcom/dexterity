@@ -35,6 +35,43 @@ Dexterity is also the right structural kernel to build on if you plan to add a s
 - Mix tasks for indexing, status, map rendering, and query execution.
 - Optional MCP transport over stdio for editor and agent integrations.
 
+## Ecosystem Direction
+
+The intended shape is a small ecosystem, not one monolith.
+
+Dexterity should remain the structural kernel:
+- Dexter ingestion
+- file and symbol graphs
+- impact, dependency, cochange, and export/runtime analysis
+- stable structural snapshots
+- direct Elixir API, Mix tasks, and MCP transport
+
+A future sibling library can sit on top of that kernel for semantic retrieval:
+- chunking and corpus policy
+- embeddings or lexical/vector search
+- hybrid reranking over semantic plus structural signals
+- model/provider integration
+
+A higher-level platform can then sit on top of both:
+- review packets
+- agent workflows
+- diagnostics and test execution loops
+- long-running services or editor integrations
+
+The important point is that those layers should consume Dexterity through its public API, Mix, or MCP surfaces, not by reaching into `GraphServer` or `SymbolGraphServer` internals.
+
+## Future Work Here
+
+This repo should stay thin, but it may still need more work in service of the kernel role:
+
+- keep improving the structural export contract for downstream consumers
+- improve indexing freshness, invalidation, and fallback behavior
+- improve precision in graph, impact, and runtime-aware analysis
+- improve determinism, performance, and backend abstraction
+- add structural backends or ingestion paths only if they strengthen the kernel itself
+
+What should not accumulate here by default is the product/platform layer: embedding-provider churn, vector search experiments, agent workflow logic, or UI concerns.
+
 ## Requirements
 
 Dexterity itself is pure Elixir, but the default production backend depends on external tooling:
