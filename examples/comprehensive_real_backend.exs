@@ -1,6 +1,11 @@
 defmodule Examples.ComprehensiveRealBackend do
   alias Dexterity
+  alias Dexterity.MCP
   alias Dexterity.Query
+  alias Mix.Tasks.Dexterity.Index, as: IndexTask
+  alias Mix.Tasks.Dexterity.Map, as: MapTask
+  alias Mix.Tasks.Dexterity.Query, as: QueryTask
+  alias Mix.Tasks.Dexterity.Status, as: StatusTask
 
   @config_keys [
     :repo_root,
@@ -20,19 +25,23 @@ defmodule Examples.ComprehensiveRealBackend do
     id = :erlang.unique_integer([:positive])
     repo_root = Path.join(System.tmp_dir!(), "dexterity-real-example-#{id}")
     store_path = Path.join(System.tmp_dir!(), "dexterity-real-example-store-#{id}.db")
+    map_output_path = Path.join(System.tmp_dir!(), "dexterity-real-example-map-#{id}.md")
     previous = snapshot_config()
     app_was_running = Process.whereis(Dexterity.Supervisor) != nil
 
     try do
       create_repo!(repo_root)
       seed_git_history!(repo_root)
-      build_index!(dexter_bin, repo_root)
-      restart_dexterity!(repo_root, store_path, dexter_bin)
+      configure_runtime(repo_root, store_path, dexter_bin)
+      build_index!(repo_root)
+      start_dexterity!()
 
       # Let the background cochange worker ingest git history, then force a rebuild.
       Process.sleep(300)
       Dexterity.GraphServer.mark_stale()
       Process.sleep(100)
+
+      run_mix_tasks!(repo_root, map_output_path)
 
       print_heading("Dexter CLI")
       IO.puts(run_cmd!(dexter_bin, ["version"], repo_root))
@@ -60,7 +69,7 @@ defmodule Examples.ComprehensiveRealBackend do
           active_file: "lib/my_app_web/live/dashboard_live.ex",
           mentioned_files: ["lib/my_app/accounts.ex"],
           edited_files: ["test/support/data_case.ex"],
-          limit: 8,
+          limit: 5,
           token_budget: 3_000,
           include_clones: true
         )
@@ -92,6 +101,8 @@ defmodule Examples.ComprehensiveRealBackend do
       touch_live_view!(repo_root)
       :ok = Dexterity.notify_file_changed("lib/my_app_web/live/dashboard_live.ex")
       IO.inspect(Query.find_references("MyApp.Accounts", "get_user!", 1), pretty: true)
+
+      run_mcp_demo(repo_root)
     after
       if Process.whereis(Dexterity.Supervisor) do
         Application.stop(:dexterity)
@@ -105,6 +116,7 @@ defmodule Examples.ComprehensiveRealBackend do
 
       File.rm_rf(repo_root)
       File.rm(store_path)
+      File.rm(map_output_path)
     end
   end
 
@@ -136,11 +148,7 @@ defmodule Examples.ComprehensiveRealBackend do
     end)
   end
 
-  defp restart_dexterity!(repo_root, store_path, dexter_bin) do
-    if Process.whereis(Dexterity.Supervisor) do
-      :ok = Application.stop(:dexterity)
-    end
-
+  defp configure_runtime(repo_root, store_path, dexter_bin) do
     Application.put_env(:dexterity, :repo_root, repo_root)
     Application.put_env(:dexterity, :backend, Dexterity.Backend.Dexter)
     Application.put_env(:dexterity, :dexter_bin, dexter_bin)
@@ -151,6 +159,12 @@ defmodule Examples.ComprehensiveRealBackend do
     Application.put_env(:dexterity, :cochange_interval_ms, 60_000)
     Application.put_env(:dexterity, :summary_enabled, false)
     Application.put_env(:dexterity, :mcp_enabled, false)
+  end
+
+  defp start_dexterity! do
+    if Process.whereis(Dexterity.Supervisor) do
+      :ok = Application.stop(:dexterity)
+    end
 
     {:ok, _apps} = Application.ensure_all_started(:dexterity)
   end
@@ -254,10 +268,137 @@ defmodule Examples.ComprehensiveRealBackend do
     git!(repo_root, ["commit", "-m", "Touch accounts and data case together"])
   end
 
-  defp build_index!(dexter_bin, repo_root) do
-    output = run_cmd!(dexter_bin, ["init", repo_root], repo_root)
-    print_heading("Dexter Index")
-    IO.puts(output)
+  defp build_index!(repo_root) do
+    print_heading("Mix Task: dexterity.index")
+    run_mix_task!("dexterity.index", IndexTask, ["--repo-root", repo_root])
+  end
+
+  defp run_mix_tasks!(repo_root, map_output_path) do
+    print_heading("Mix Task: dexterity.status")
+    run_mix_task!("dexterity.status", StatusTask, ["--repo-root", repo_root])
+
+    print_heading("Mix Task: dexterity.map")
+
+    run_mix_task!("dexterity.map", MapTask, [
+      "--repo-root",
+      repo_root,
+      "--active-file",
+      "lib/my_app_web/live/dashboard_live.ex",
+      "--mentioned-file",
+      "lib/my_app/accounts.ex",
+      "--edited-file",
+      "test/support/data_case.ex",
+      "--limit",
+      "5",
+      "--token-budget",
+      "3000",
+      "--include-clones",
+      "--output",
+      map_output_path
+    ])
+
+    IO.puts(File.read!(map_output_path))
+
+    print_heading("Mix Task: dexterity.query definition")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "definition",
+      "MyApp.Accounts",
+      "register_user",
+      "1",
+      "--repo-root",
+      repo_root
+    ])
+
+    print_heading("Mix Task: dexterity.query references")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "references",
+      "MyApp.Accounts",
+      "register_user",
+      "1",
+      "--repo-root",
+      repo_root
+    ])
+
+    print_heading("Mix Task: dexterity.query blast")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "blast",
+      "lib/my_app_web/live/dashboard_live.ex",
+      "--repo-root",
+      repo_root,
+      "--depth",
+      "2"
+    ])
+
+    print_heading("Mix Task: dexterity.query cochanges")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "cochanges",
+      "lib/my_app/accounts.ex",
+      "--repo-root",
+      repo_root,
+      "--limit",
+      "5"
+    ])
+  end
+
+  defp run_mcp_demo(repo_root) do
+    context = %{
+      backend: Dexterity.Backend.Dexter,
+      repo_root: repo_root,
+      graph_server: Dexterity.GraphServer
+    }
+
+    print_heading("MCP initialize")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 1,
+      "method" => "initialize",
+      "params" => %{"info" => "comprehensive_real_backend"}
+    }, context)
+
+    print_heading("MCP tools/list")
+    mcp_request!(%{"jsonrpc" => "2.0", "id" => 2, "method" => "tools/list"}, context)
+
+    print_heading("MCP tools/call status")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 3,
+      "method" => "tools/call",
+      "params" => %{"name" => "status", "arguments" => %{}}
+    }, context)
+
+    print_heading("MCP tools/call get_repo_map")
+
+    mcp_request!(%{
+      "jsonrpc" => "2.0",
+      "id" => 4,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_repo_map",
+        "arguments" => %{
+          "active_file" => "lib/my_app/accounts.ex",
+          "mentioned_files" => ["lib/my_app_web/live/dashboard_live.ex"],
+          "token_budget" => 2048,
+          "limit" => 5
+        }
+      }
+    }, context)
+  end
+
+  defp mcp_request!(request, context) do
+    request
+    |> Jason.encode!()
+    |> MCP.process_line(context)
+  end
+
+  defp run_mix_task!(task_name, module, args) do
+    Mix.Task.reenable(task_name)
+    module.run(args)
   end
 
   defp touch_live_view!(repo_root) do

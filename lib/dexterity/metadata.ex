@@ -210,7 +210,7 @@ defmodule Dexterity.Metadata do
     if File.regular?(path) do
       source = File.read!(path)
 
-      case Code.string_to_quoted(source) do
+      case Code.string_to_quoted(source, file: path, emit_warnings: false) do
         {:ok, ast} ->
           ast
           |> collect_metadata()

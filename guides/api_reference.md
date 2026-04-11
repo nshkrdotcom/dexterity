@@ -36,6 +36,8 @@ Authoritative public API behavior for Dexterity.
 - `:backend`
 - `:repo_root`
 - `:graph_server`
+- `:store_conn`
+- `:store_server`
 - `:depth`
 - `:limit`
 
@@ -57,7 +59,7 @@ Authoritative public API behavior for Dexterity.
   - `--edited-file FILE`
   - `--limit N`
   - `--token-budget N|auto`
-  - `--include-clones true|false`
+  - `--include-clones` / `--no-include-clones`
   - `--output PATH`
   - `--backend MODULE`
 - `mix dexterity.query references|definition|blast|cochanges [args]`

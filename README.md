@@ -34,7 +34,7 @@ Dexterity itself is pure Elixir, but the default production backend depends on e
 3. `git` should be available if you want cochange analysis to be useful.
 4. Native build tooling required by `exqlite` must be available on the machine building dependencies.
 
-The included example is fully real: it creates a temporary repo, builds a real Dexter index, ingests real git history for cochanges, and runs Dexterity against the resulting `.dexter.db`.
+The included example is fully real: it creates a temporary repo, builds a real Dexter index through `mix dexterity.index`, ingests real git history for cochanges, and exercises Dexterity's mix tasks, library APIs, and MCP request handling against the resulting `.dexter.db`.
 
 ## Installation
 
@@ -68,7 +68,7 @@ config :dexterity,
   mcp_enabled: true
 ```
 
-Build the Dexter index for the repo:
+Build or refresh the Dexter index for the repo:
 
 ```bash
 mix dexterity.index --repo-root .
@@ -162,7 +162,8 @@ mix run examples/comprehensive_real_backend.exs
 
 That example shows:
 
-- real Dexter indexing
+- real Dexter indexing through `mix dexterity.index`
+- live mix-task status, map, and query execution
 - real git-driven cochange ingestion
 - ranked repo map generation
 - semantic symbol lookup
@@ -171,6 +172,7 @@ That example shows:
 - blast radius
 - cochange enrichment
 - real file reindexing
+- live MCP JSON-RPC requests
 
 See [examples/README.md](examples/README.md) for details.
 

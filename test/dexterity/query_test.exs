@@ -3,6 +3,7 @@ defmodule Dexterity.QueryTest do
 
   alias Dexterity.GraphServer
   alias Dexterity.Query
+  alias Dexterity.Store
 
   defmodule QueryBackend do
     @behaviour Dexterity.Backend
@@ -143,33 +144,29 @@ defmodule Dexterity.QueryTest do
     _ = pid
   end
 
-  test "cochanges returns top-N neighbor weights for file" do
-    root =
+  test "cochanges returns git-derived neighbors from the metadata store" do
+    path =
       Path.join(
         System.tmp_dir!(),
-        "dexterity-query-cochanges-#{:erlang.unique_integer([:positive])}"
+        "dexterity-query-cochanges-#{:erlang.unique_integer([:positive])}.db"
       )
 
-    File.mkdir_p!(root)
+    {:ok, conn} = Store.open(path)
 
-    name =
-      Module.concat(__MODULE__, :"CochangeGraph#{:erlang.unique_integer([:positive])}")
+    assert :ok = Store.upsert_cochange(conn, "lib/a.ex", "lib/b.ex", 5, 2.5, 1_000)
+    assert :ok = Store.upsert_cochange(conn, "lib/a.ex", "lib/c.ex", 3, 1.2, 1_000)
+    assert :ok = Store.upsert_cochange(conn, "lib/a.ex", "lib/ignored.ex", 1, 0.0, 1_000)
+    assert :ok = Store.upsert_cochange(conn, "lib/d.ex", "lib/e.ex", 9, 4.1, 1_000)
 
-    {:ok, pid} =
-      start_supervised(
-        {GraphServer,
-         [
-           repo_root: root,
-           backend: BlastGraphBackend,
-           store_conn: nil,
-           name: name
-         ]}
-      )
+    assert {:ok, [{"lib/b.ex", 2.5}, {"lib/c.ex", 1.2}]} =
+             Query.cochanges("lib/a.ex", 5, store_conn: conn)
 
-    assert {:ok, [{"lib/b.ex", 1.0}]} = Query.cochanges("lib/a.ex", 5, graph_server: name)
-    assert {:ok, [{"lib/c.ex", 1.0}]} = Query.cochanges("lib/b.ex", 1, graph_server: name)
+    assert {:ok, [{"lib/a.ex", 2.5}]} = Query.cochanges("lib/b.ex", 5, store_conn: conn)
+    assert {:ok, []} = Query.cochanges("lib/unknown.ex", 5, store_conn: conn)
 
-    _ = pid
-    on_exit(fn -> File.rm_rf!(root) end)
+    on_exit(fn ->
+      Store.close(conn)
+      File.rm(path)
+    end)
   end
 end

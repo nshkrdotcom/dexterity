@@ -16,10 +16,12 @@ This example is intentionally real. It requires a working `dexter` binary on `PA
 
 - creates a temporary Elixir-shaped repo on disk
 - initializes a real git repository with multiple commits
-- runs `dexter init` to build a real `.dexter.db`
+- runs `mix dexterity.index` to build or refresh a real `.dexter.db`
 - starts Dexterity with `Dexterity.Backend.Dexter`
 - lets the real cochange worker ingest git history
+- exercises the mix-task surface in-process
 - exercises the main public APIs and prints the results
+- sends live JSON-RPC requests through the MCP transport layer
 
 Use it to validate your local Dexter + Dexterity setup against a disposable repo before pointing Dexterity at a larger project.
 

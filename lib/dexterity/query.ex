@@ -6,6 +6,8 @@ defmodule Dexterity.Query do
   alias Dexterity.Backend
   alias Dexterity.Config
   alias Dexterity.GraphServer
+  alias Dexterity.Store
+  alias Dexterity.StoreServer
 
   @type definition_filters :: [
           module: String.t(),
@@ -34,21 +36,23 @@ defmodule Dexterity.Query do
   @spec cochanges(String.t(), non_neg_integer(), keyword()) ::
           {:ok, [{String.t(), float()}]} | {:error, term()}
   def cochanges(file, limit \\ 10, opts \\ []) do
-    server = Keyword.get(opts, :graph_server, GraphServer)
-
-    try do
-      adjacency = GraphServer.get_adjacency(server)
-      cochanges = Map.get(adjacency, file, %{}) |> Map.to_list()
-
-      results =
-        cochanges
-        |> Enum.sort_by(fn {_neighbor, weight} -> -weight end)
-        |> Enum.take(limit)
-        |> Enum.map(fn {neighbor, weight} -> {neighbor, weight} end)
-
-      {:ok, results}
-    rescue
-      _ -> {:error, :graph_unavailable}
+    with {:ok, conn} <- fetch_store_conn(opts),
+         {:ok, rows} <- Store.list_cochanges(conn) do
+      rows
+      |> Enum.flat_map(fn {file_a, file_b, _frequency, weight} ->
+        cond do
+          file_a == file -> [{file_b, weight}]
+          file_b == file -> [{file_a, weight}]
+          true -> []
+        end
+      end)
+      |> Enum.reject(fn {_neighbor, weight} -> weight <= 0 end)
+      |> Enum.sort_by(fn {neighbor, weight} -> {-weight, neighbor} end)
+      |> Enum.take(limit)
+      |> then(&{:ok, &1})
+    else
+      {:error, _reason} ->
+        {:error, :cochange_data_unavailable}
     end
   end
 
@@ -99,5 +103,22 @@ defmodule Dexterity.Query do
 
     Enum.map(visited, fn {file, depth} -> %{source: file, depth: depth} end)
     |> Enum.sort_by(fn item -> {item.depth, item.source} end)
+  end
+
+  defp fetch_store_conn(opts) do
+    case Keyword.get(opts, :store_conn) do
+      nil ->
+        store_server = Keyword.get(opts, :store_server, StoreServer)
+
+        case Process.whereis(store_server) do
+          nil -> {:error, :store_unavailable}
+          _pid -> {:ok, StoreServer.conn(store_server)}
+        end
+
+      conn ->
+        {:ok, conn}
+    end
+  rescue
+    _ -> {:error, :store_unavailable}
   end
 end

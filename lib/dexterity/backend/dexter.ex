@@ -179,7 +179,7 @@ defmodule Dexterity.Backend.Dexter do
 
   @impl Dexterity.Backend
   def reindex_file(file, opts \\ []) do
-    repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
+    repo_root = Keyword.get(opts, :repo_root, Config.repo_root()) |> Path.expand()
     args = ["reindex", file]
 
     run_command(args, repo_root)
@@ -187,8 +187,8 @@ defmodule Dexterity.Backend.Dexter do
 
   @impl Dexterity.Backend
   def cold_index(repo_root, opts \\ []) do
-    cwd = Keyword.get(opts, :repo_root, repo_root)
-    run_command(["index"], cwd)
+    cwd = Keyword.get(opts, :repo_root, repo_root) |> Path.expand()
+    run_command(["init", "."], cwd)
   end
 
   @impl Dexterity.Backend

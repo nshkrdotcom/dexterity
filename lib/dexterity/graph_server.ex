@@ -251,10 +251,15 @@ defmodule Dexterity.GraphServer do
   defp merge_cochanges(graph, cochanges) do
     cochanges
     |> Enum.reduce(graph, fn {file_a, file_b, _freq, weight}, acc ->
-      source = Map.get(acc, file_a, %{})
-      dest = Map.update(source, file_b, weight, &(&1 + weight))
-      Map.put(acc, file_a, dest)
+      acc
+      |> put_weighted_edge(file_a, file_b, weight)
+      |> put_weighted_edge(file_b, file_a, weight)
     end)
+  end
+
+  defp put_weighted_edge(graph, source, target, weight) do
+    edges = Map.get(graph, source, %{})
+    Map.put(graph, source, Map.update(edges, target, weight, &(&1 + weight)))
   end
 
   defp normalize_empty_nodes(graph) do

@@ -9,7 +9,7 @@ Dexterity publishes its CLI commands through `mix` tasks.
 - `--repo-root PATH` (default config repo root)
 - `--backend MODULE` (default `Dexterity.Backend.Dexter`)
 
-Runs `backend.cold_index/2` and outputs `index refreshed` on success.
+Creates a missing Dexter index with `backend.cold_index/2`, or refreshes an existing one with `backend.reindex_file/2`, then outputs `index refreshed` on success.
 
 ### `mix dexterity.status`
 
@@ -25,7 +25,7 @@ Prints a normalized status map with backend and graph health.
 - `--edited-file FILE` (repeatable)
 - `--limit N` (default `25`)
 - `--token-budget N|auto`
-- `--include-clones true|false`
+- `--include-clones` / `--no-include-clones`
 - `--repo-root PATH`
 - `--backend MODULE`
 - `--output PATH`

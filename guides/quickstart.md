@@ -20,7 +20,7 @@ If you want to validate the full real backend flow before wiring Dexterity into 
 mix run examples/comprehensive_real_backend.exs
 ```
 
-That example uses a real `dexter` binary, a real temporary `.dexter.db`, and real git history.
+That example uses a real `dexter` binary, a real temporary `.dexter.db`, real git history, the live mix-task surface, and live MCP requests.
 
 ## Minimum local runtime
 

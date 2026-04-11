@@ -3,13 +3,6 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
 
   alias Dexterity.Config
 
-  @backend_callback_keys [
-    {:cold_index, 2},
-    {:index_status, 1},
-    {:healthy?, 1},
-    {:list_file_edges, 1}
-  ]
-
   @task_repo_root_key :repo_root
   @task_backend_key :backend
 
@@ -148,12 +141,12 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
 
   @spec ensure_backend_behaviour!(module()) :: module()
   defp ensure_backend_behaviour!(module) when is_atom(module) do
-    unless function_exported?(module, :cold_index, 2) do
+    unless Code.ensure_loaded?(module) do
       raise ArgumentError,
             "module #{inspect(module)} does not satisfy Dexterity.Backend contract"
     end
 
-    Enum.each(@backend_callback_keys, fn {func, arity} ->
+    Enum.each(Dexterity.Backend.behaviour_info(:callbacks), fn {func, arity} ->
       unless function_exported?(module, func, arity) do
         raise ArgumentError,
               "module #{inspect(module)} does not implement #{func}/#{arity}"

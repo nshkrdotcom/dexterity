@@ -135,4 +135,70 @@ defmodule Dexterity.Backend.DexterTest do
 
     assert {:error, :backend_missing_binary} = Dexter.healthy?(System.tmp_dir!())
   end
+
+  test "cold_index builds a real dexter database for a repo" do
+    dexter_bin = System.find_executable("dexter")
+    repo_root = create_real_repo!()
+    previous = Application.get_env(:dexterity, :dexter_bin)
+
+    assert is_binary(dexter_bin)
+
+    on_exit(fn ->
+      if is_nil(previous) do
+        Application.delete_env(:dexterity, :dexter_bin)
+      else
+        Application.put_env(:dexterity, :dexter_bin, previous)
+      end
+
+      File.rm_rf!(repo_root)
+    end)
+
+    Application.put_env(:dexterity, :dexter_bin, dexter_bin)
+
+    assert :ok = Dexter.cold_index(repo_root)
+    assert {:ok, :ready} = Dexter.index_status(repo_root)
+    assert File.exists?(Path.join(repo_root, ".dexter.db"))
+
+    assert {:ok, symbols} = Dexter.list_exported_symbols(repo_root, "lib/example.ex")
+    assert Enum.any?(symbols, &(&1.module == "Example"))
+    assert Enum.any?(symbols, &(&1.function == "hello"))
+  end
+
+  defp create_real_repo! do
+    repo_root =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-backend-real-repo-#{:erlang.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(Path.join(repo_root, "lib"))
+
+    File.write!(
+      Path.join(repo_root, "mix.exs"),
+      """
+      defmodule Example.MixProject do
+        use Mix.Project
+
+        def project do
+          [
+            app: :example,
+            version: "0.1.0",
+            elixir: "~> 1.18"
+          ]
+        end
+      end
+      """
+    )
+
+    File.write!(
+      Path.join(repo_root, "lib/example.ex"),
+      """
+      defmodule Example do
+        def hello(name), do: {:ok, name}
+      end
+      """
+    )
+
+    repo_root
+  end
 end

@@ -78,7 +78,8 @@ defmodule Dexterity.CochangeWorker do
         "-n",
         to_string(state.max_commits)
       ],
-      cd: state.repo_root
+      cd: state.repo_root,
+      stderr_to_stdout: true
     )
   end
 

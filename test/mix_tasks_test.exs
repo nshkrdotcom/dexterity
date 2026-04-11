@@ -3,10 +3,13 @@ defmodule MixTasksTest do
 
   import ExUnit.CaptureIO
 
+  alias Dexterity.Backend.Dexter
+  alias Dexterity.Store
   alias Mix.Tasks.Dexterity.Index
   alias Mix.Tasks.Dexterity.Map, as: MapTask
   alias Mix.Tasks.Dexterity.Query
   alias Mix.Tasks.Dexterity.Status
+  alias Mix.Tasks.Dexterity.TaskHelpers
 
   defmodule TaskBackend do
     @behaviour Dexterity.Backend
@@ -95,6 +98,47 @@ defmodule MixTasksTest do
     assert output =~ "index refreshed"
   end
 
+  test "task helpers load backend modules before validating callbacks" do
+    unload_module!(Dexterity.Backend.Dexter)
+    assert :code.is_loaded(Dexterity.Backend.Dexter) == false
+
+    assert TaskHelpers.parse_backend(backend: "Dexterity.Backend.Dexter") ==
+             Dexterity.Backend.Dexter
+  end
+
+  test "dexterity.index loads the configured backend and builds a real index" do
+    dexter_bin = System.find_executable("dexter")
+    repo_root = create_real_repo!()
+    previous_bin = Application.get_env(:dexterity, :dexter_bin)
+
+    assert is_binary(dexter_bin)
+
+    on_exit(fn ->
+      stop_app_if_running()
+      restore_env(:dexterity, :dexter_bin, previous_bin)
+      Code.ensure_loaded(Dexterity.Backend.Dexter)
+      File.rm_rf(repo_root)
+    end)
+
+    Application.put_env(:dexterity, :dexter_bin, dexter_bin)
+    unload_module!(Dexterity.Backend.Dexter)
+
+    first_output =
+      capture_io(fn ->
+        Index.run(["--repo-root", repo_root])
+      end)
+
+    second_output =
+      capture_io(fn ->
+        Index.run(["--repo-root", repo_root])
+      end)
+
+    assert first_output =~ "index refreshed"
+    assert second_output =~ "index refreshed"
+    assert File.exists?(Path.join(repo_root, ".dexter.db"))
+    assert {:ok, :ready} = Dexter.index_status(repo_root)
+  end
+
   test "dexterity.status prints status snapshot" do
     backend = TaskBackend
 
@@ -138,6 +182,25 @@ defmodule MixTasksTest do
 
   test "dexterity.query references/definition/blast/cochanges surfaces" do
     backend = QueryTaskBackend
+
+    store_path =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-mix-query-store-#{:erlang.unique_integer([:positive])}.db"
+      )
+
+    previous_store_path = Application.get_env(:dexterity, :store_path)
+    {:ok, conn} = Store.open(store_path)
+    assert :ok = Store.upsert_cochange(conn, "lib/a.ex", "lib/b.ex", 5, 2.4, 1_000)
+
+    Application.put_env(:dexterity, :store_path, store_path)
+
+    on_exit(fn ->
+      stop_app_if_running()
+      Store.close(conn)
+      restore_env(:dexterity, :store_path, previous_store_path)
+      File.rm(store_path)
+    end)
 
     refs =
       capture_io(fn ->
@@ -194,5 +257,52 @@ defmodule MixTasksTest do
     end
 
     :ok
+  end
+
+  defp unload_module!(module) do
+    :code.purge(module)
+    :code.delete(module)
+    :ok
+  end
+
+  defp restore_env(app, key, nil), do: Application.delete_env(app, key)
+  defp restore_env(app, key, value), do: Application.put_env(app, key, value)
+
+  defp create_real_repo! do
+    repo_root =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-mix-task-repo-#{:erlang.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(Path.join(repo_root, "lib"))
+
+    File.write!(
+      Path.join(repo_root, "mix.exs"),
+      """
+      defmodule Example.MixProject do
+        use Mix.Project
+
+        def project do
+          [
+            app: :example,
+            version: "0.1.0",
+            elixir: "~> 1.18"
+          ]
+        end
+      end
+      """
+    )
+
+    File.write!(
+      Path.join(repo_root, "lib/example.ex"),
+      """
+      defmodule Example do
+        def hello(name), do: {:ok, name}
+      end
+      """
+    )
+
+    repo_root
   end
 end

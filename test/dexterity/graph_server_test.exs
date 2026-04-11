@@ -2,6 +2,7 @@ defmodule Dexterity.GraphServerTest do
   use ExUnit.Case
 
   alias Dexterity.GraphServer
+  alias Dexterity.Store
 
   defmodule FakeBackend do
     @behaviour Dexterity.Backend
@@ -52,6 +53,37 @@ defmodule Dexterity.GraphServerTest do
          "lib/notifications/sms.ex"
        ]}
     end
+
+    @impl true
+    def list_exported_symbols(_repo_root, _file), do: {:ok, []}
+
+    @impl true
+    def find_definition(_repo_root, _module, _function, _arity), do: {:error, :not_found}
+
+    @impl true
+    def find_references(_repo_root, _module, _function, _arity), do: {:ok, []}
+
+    @impl true
+    def reindex_file(_file, _opts), do: :ok
+
+    @impl true
+    def cold_index(_repo_root, _opts), do: :ok
+
+    @impl true
+    def index_status(_repo_root), do: {:ok, :ready}
+
+    @impl true
+    def healthy?(_repo_root), do: {:ok, true}
+  end
+
+  defmodule CochangeOnlyBackend do
+    @behaviour Dexterity.Backend
+
+    @impl true
+    def list_file_edges(_repo_root), do: {:ok, []}
+
+    @impl true
+    def list_file_nodes(_repo_root), do: {:ok, ["lib/a.ex", "lib/b.ex"]}
 
     @impl true
     def list_exported_symbols(_repo_root, _file), do: {:ok, []}
@@ -204,5 +236,49 @@ defmodule Dexterity.GraphServerTest do
     assert adjacency["lib/notifications/sms.ex"]["lib/notifications/email.ex"] == 0.5
 
     File.rm_rf!(repo_root)
+  end
+
+  test "merges cochange edges in both directions" do
+    repo_root =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-cochange-graph-#{:erlang.unique_integer([:positive])}"
+      )
+
+    store_path =
+      Path.join(
+        System.tmp_dir!(),
+        "dexterity-cochange-graph-#{:erlang.unique_integer([:positive])}.db"
+      )
+
+    name = Module.concat(__MODULE__, :"CochangeGraph#{:erlang.unique_integer([:positive])}")
+
+    File.mkdir_p!(repo_root)
+    {:ok, conn} = Store.open(store_path)
+    assert :ok = Store.upsert_cochange(conn, "lib/a.ex", "lib/b.ex", 4, 2.2, 1_000)
+
+    start_supervised!(
+      Supervisor.child_spec(
+        {GraphServer,
+         [
+           repo_root: repo_root,
+           backend: CochangeOnlyBackend,
+           store_conn: conn,
+           name: name
+         ]},
+        id: name
+      )
+    )
+
+    Process.sleep(20)
+
+    adjacency = GraphServer.get_adjacency(name)
+
+    assert adjacency["lib/a.ex"]["lib/b.ex"] == 2.2
+    assert adjacency["lib/b.ex"]["lib/a.ex"] == 2.2
+
+    Store.close(conn)
+    File.rm_rf!(repo_root)
+    File.rm(store_path)
   end
 end
