@@ -1,0 +1,5 @@
+{:ok, conn} = Exqlite.Basic.open("test.db")
+IO.inspect(Exqlite.Basic.exec(conn, "CREATE TABLE test (id integer);"))
+IO.inspect(Exqlite.Basic.exec(conn, "INSERT INTO test VALUES (1);"))
+IO.inspect(Exqlite.Basic.exec(conn, "SELECT * FROM test;"))
+IO.puts("DONE")

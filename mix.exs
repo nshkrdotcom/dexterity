@@ -16,7 +16,8 @@ defmodule Dexterity.MixProject do
       name: "Dexterity",
       source_url: @repo_url,
       homepage_url: @repo_url,
-      docs: docs()
+      docs: docs(),
+      dialyzer: dialyzer()
     ]
   end
 
@@ -46,7 +47,16 @@ defmodule Dexterity.MixProject do
       {:file_system, "~> 1.0"},
       {:nx, "~> 0.9", optional: true},
       {:tiktoken, "~> 0.4", optional: true},
-      {:ex_doc, "~> 0.40", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+    ]
+  end
+
+  defp dialyzer do
+    [
+      plt_add_apps: [:mix, :ex_unit],
+      flags: [:error_handling, :missing_return, :underspecs]
     ]
   end
 
@@ -57,7 +67,7 @@ defmodule Dexterity.MixProject do
       extras: [
         "README.md": [title: "Guide"],
         "CHANGELOG.md": [title: "Changelog"],
-        "LICENSE": [title: "License"]
+        LICENSE: [title: "License"]
       ],
       groups_for_extras: [
         Documentation: ~r/README.md/,
