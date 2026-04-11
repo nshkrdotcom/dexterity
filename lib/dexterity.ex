@@ -5,7 +5,11 @@ defmodule Dexterity do
 
   alias Dexterity.Config
   alias Dexterity.GraphServer
+  alias Dexterity.Metadata
   alias Dexterity.Render
+  alias Dexterity.Store
+  alias Dexterity.StoreServer
+  alias Dexterity.SummaryWorker
 
   @type context_opts :: [
           active_file: String.t(),
@@ -16,7 +20,11 @@ defmodule Dexterity do
           min_rank: float(),
           limit: pos_integer(),
           backend: module(),
-          repo_root: String.t()
+          repo_root: String.t(),
+          graph_server: GenServer.server(),
+          summary_server: GenServer.server(),
+          store_conn: Dexterity.Store.db_conn() | nil,
+          summary_enabled: boolean()
         ]
 
   @type status_snapshot :: %{
@@ -35,6 +43,7 @@ defmodule Dexterity do
   def get_repo_map(opts \\ []) do
     backend = Keyword.get(opts, :backend, Config.fetch(:backend))
     repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
+    graph_server = Keyword.get(opts, :graph_server, GraphServer)
     budget = Keyword.get(opts, :token_budget, :auto)
     {min_budget, default_budget, max_budget} = Config.token_budget_range()
     budget = clamp_budget(budget, min_budget, max_budget, default_budget)
@@ -43,12 +52,13 @@ defmodule Dexterity do
 
     context_files = context_files(opts)
 
-    with {:ok, ranked} <- GraphServer.get_repo_map(GraphServer, context_files, limit: limit),
+    with {:ok, ranked} <- GraphServer.get_repo_map(graph_server, context_files, limit: limit),
          {:ok, ranked_list} <- normalize_ranked(ranked, Keyword.get(opts, :min_rank, 0.0)),
+         {:ok, metadata} <- fetch_metadata(graph_server),
          {:ok, symbols} <- fetch_symbols(backend, repo_root, ranked_list),
-         {:ok, summaries} <- fetch_summaries(ranked_list),
-         {:ok, clones} <- detect_clones(ranked_list, include_clones) do
-      {:ok, Render.render_files(ranked_list, symbols, summaries, clones, budget)}
+         {:ok, summaries} <- fetch_summaries(ranked_list, metadata, symbols, repo_root, opts),
+         {:ok, clones} <- detect_clones(ranked_list, metadata, include_clones, opts) do
+      {:ok, Render.render_files(ranked_list, symbols, summaries, clones, metadata, budget)}
     end
   end
 
@@ -241,15 +251,146 @@ defmodule Dexterity do
     {:ok, symbols}
   end
 
-  defp fetch_summaries(ranked_files) do
-    {:ok, Enum.into(ranked_files, %{}, fn {file, _score} -> {file, nil} end)}
+  defp fetch_metadata(graph_server) do
+    {:ok, GraphServer.get_metadata(graph_server)}
   end
 
-  defp detect_clones(ranked_files, true) do
-    {:ok, Map.new(ranked_files, fn {file, _score} -> {file, nil} end)}
+  defp fetch_summaries(ranked_files, metadata, symbols, repo_root, opts) do
+    store_conn = store_conn(opts)
+    summary_server = Keyword.get(opts, :summary_server, SummaryWorker)
+    summary_enabled = Keyword.get(opts, :summary_enabled, Config.fetch(:summary_enabled))
+
+    summaries =
+      Map.new(ranked_files, fn {file, _score} ->
+        metadata_for_file = Map.get(metadata, file)
+        symbol_list = Map.get(symbols, file, [])
+
+        case Metadata.summary_entry(metadata_for_file, symbol_list) do
+          nil ->
+            {file, nil}
+
+          %{module_name: module_name, context: context, signature: signature} ->
+            current_mtime = file_mtime(repo_root, file)
+
+            case cached_summary(store_conn, file, module_name, current_mtime, signature) do
+              {:ok, summary} ->
+                {file, summary}
+
+              :stale ->
+                if summary_enabled do
+                  SummaryWorker.summarize(summary_server, file, module_name, current_mtime, context)
+                end
+
+                {file, nil}
+            end
+        end
+      end)
+
+    {:ok, summaries}
   end
 
-  defp detect_clones(_ranked_files, false), do: {:ok, %{}}
+  defp cached_summary(nil, _file, _module_name, _current_mtime, _signature), do: :stale
+
+  defp cached_summary(store_conn, file, module_name, current_mtime, signature) do
+    case Store.get_summary(store_conn, file, module_name) do
+      {:ok, {summary, cached_mtime, cached_signature}}
+      when cached_mtime >= current_mtime and cached_signature == signature ->
+        {:ok, summary}
+
+      _ ->
+        :stale
+    end
+  rescue
+    _ -> :stale
+  end
+
+  defp detect_clones(ranked_files, metadata, true, opts) do
+    threshold = Config.clone_similarity_threshold()
+    store_conn = store_conn(opts)
+
+    {clones, _seen} =
+      Enum.reduce(ranked_files, {%{}, []}, fn {file, _score}, {clones_acc, seen} ->
+        metadata_for_file = Map.get(metadata, file)
+        module_name = Metadata.primary_module(metadata_for_file, file)
+        tokens = Metadata.clone_tokens(metadata_for_file)
+
+        persist_clone_signature(store_conn, file, module_name, metadata_for_file)
+
+        if tokens == [] do
+          {clones_acc, seen}
+        else
+          case best_clone_match(tokens, seen, threshold) do
+            nil ->
+              {clones_acc, [%{file: file, tokens: tokens} | seen]}
+
+            %{source: source, similarity: similarity} ->
+              {Map.put(clones_acc, file, %{source: source, similarity: similarity}),
+               [%{file: file, tokens: tokens} | seen]}
+          end
+        end
+      end)
+
+    {:ok, clones}
+  end
+
+  defp detect_clones(_ranked_files, _metadata, false, _opts), do: {:ok, %{}}
+
+  defp best_clone_match(tokens, seen, threshold) do
+    seen
+    |> Enum.map(fn %{file: source, tokens: other_tokens} ->
+      %{source: source, similarity: jaccard_similarity(tokens, other_tokens)}
+    end)
+    |> Enum.filter(&(&1.similarity >= threshold))
+    |> Enum.sort_by(fn %{similarity: similarity, source: source} -> {-similarity, source} end)
+    |> List.first()
+  end
+
+  defp jaccard_similarity(left, right) do
+    left = MapSet.new(left)
+    right = MapSet.new(right)
+    intersection = MapSet.intersection(left, right) |> MapSet.size()
+    union = MapSet.union(left, right) |> MapSet.size()
+
+    if union == 0 do
+      0.0
+    else
+      intersection / union
+    end
+  end
+
+  defp persist_clone_signature(nil, _file, _module_name, _metadata), do: :ok
+
+  defp persist_clone_signature(store_conn, file, module_name, metadata) do
+    case Metadata.clone_signature(metadata) do
+      nil -> :ok
+      signature -> Store.upsert_token_signature(store_conn, file, module_name, signature)
+    end
+  rescue
+    _ -> :ok
+  end
+
+  defp store_conn(opts) do
+    case Keyword.fetch(opts, :store_conn) do
+      {:ok, conn} ->
+        conn
+
+      :error ->
+        if Process.whereis(StoreServer) do
+          StoreServer.conn()
+        else
+          nil
+        end
+    end
+  end
+
+  defp file_mtime(repo_root, file) do
+    path = Path.join(repo_root, file)
+
+    case File.stat(path, time: :posix) do
+      {:ok, stat} -> stat.mtime
+      _ -> 0
+    end
+  end
 
   defp clamp_budget(:auto, _, _, default), do: default
 

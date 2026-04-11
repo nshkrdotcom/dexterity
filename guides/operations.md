@@ -46,7 +46,6 @@ Run this sequence before major handoffs:
 
 ## Repository hygiene
 
-- Remove ephemeral artifacts before release checkpoints:
-  - `test.db`
-  - `test_db.exs`
-  - `.dexterity/` (test workspace only)
+- The runtime metadata store at `.dexterity/dexterity.db` is generated and git-ignored.
+- Keep tracked fixtures such as `test.db` and `test_db.exs`; they are repository assets, not runtime output.
+- If local debugging leaves extra runtime state behind, remove `.dexterity/` before packaging or publishing.

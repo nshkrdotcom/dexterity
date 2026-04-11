@@ -6,6 +6,7 @@ defmodule Dexterity.GraphServer do
   use GenServer
 
   alias Dexterity.Config
+  alias Dexterity.Metadata
   alias Dexterity.StoreServer
   alias Dexterity.PageRank
   alias Dexterity.Store
@@ -15,6 +16,7 @@ defmodule Dexterity.GraphServer do
           backend: module(),
           store_conn: Dexterity.Store.db_conn(),
           graph: %{String.t() => %{String.t() => float()}},
+          metadata: %{String.t() => map()},
           all_files: [String.t()],
           stale: boolean(),
           baseline: %{String.t() => float()}
@@ -33,6 +35,10 @@ defmodule Dexterity.GraphServer do
 
   def get_adjacency(server \\ __MODULE__) do
     GenServer.call(server, :get_adjacency, 60_000)
+  end
+
+  def get_metadata(server \\ __MODULE__) do
+    GenServer.call(server, :get_metadata, 60_000)
   end
 
   def get_baseline_rank(server \\ __MODULE__) do
@@ -78,6 +84,18 @@ defmodule Dexterity.GraphServer do
   end
 
   @impl true
+  def handle_call(:get_metadata, _from, state) do
+    state =
+      if state.stale do
+        rebuild_graph(state)
+      else
+        state
+      end
+
+    {:reply, state.metadata, %{state | stale: false}}
+  end
+
+  @impl true
   def handle_call(:get_baseline_rank, _from, state) do
     {:reply, state.baseline, state}
   end
@@ -96,6 +114,7 @@ defmodule Dexterity.GraphServer do
       backend: backend,
       store_conn: store_conn,
       graph: %{},
+      metadata: %{},
       all_files: [],
       stale: true,
       baseline: %{}
@@ -131,15 +150,17 @@ defmodule Dexterity.GraphServer do
     edges = fetch_file_edges(state)
     cochange_edges = fetch_cochange_edges(state)
     file_nodes = fetch_file_nodes(state)
+    candidate_files = collect_candidate_files(edges, file_nodes)
+    metadata = Metadata.build(state.repo_root, candidate_files)
 
-    merged = merge_edges(edges, cochange_edges)
-    all_files = collect_files(merged, file_nodes)
+    merged = merge_edges(edges, cochange_edges, metadata.edges)
+    all_files = collect_files(merged, file_nodes ++ Map.keys(metadata.files))
 
     sorted_all = Enum.sort(all_files)
     baseline = PageRank.compute(merged, [], sorted_all)
 
     cache_pagerank(state.store_conn, baseline)
-    %{state | graph: merged, all_files: sorted_all, baseline: baseline, stale: false}
+    %{state | graph: merged, metadata: metadata.files, all_files: sorted_all, baseline: baseline, stale: false}
   end
 
   defp fetch_file_edges(state) do
@@ -189,14 +210,33 @@ defmodule Dexterity.GraphServer do
     MapSet.to_list(nodes)
   end
 
-  defp merge_edges(base_edges, cochange_edges) do
+  defp collect_candidate_files(base_edges, file_nodes) do
+    base_edges
+    |> Enum.reduce(MapSet.new(file_nodes), fn {source, target, _weight}, acc ->
+      acc
+      |> MapSet.put(source)
+      |> MapSet.put(target)
+    end)
+    |> MapSet.to_list()
+  end
+
+  defp merge_edges(base_edges, cochange_edges, metadata_edges) do
     base_edges
     |> Enum.reduce(%{}, fn {source, target, weight}, acc ->
       graph = Map.get(acc, source, %{})
       Map.put(acc, source, Map.update(graph, target, weight, &(&1 + weight)))
     end)
+    |> merge_metadata_edges(metadata_edges)
     |> merge_cochanges(cochange_edges)
     |> normalize_empty_nodes()
+  end
+
+  defp merge_metadata_edges(graph, metadata_edges) do
+    Enum.reduce(metadata_edges, graph, fn {source, target, weight}, acc ->
+      edges = Map.get(acc, source, %{})
+      updated_edges = Map.update(edges, target, weight, &(&1 + weight))
+      Map.put(acc, source, updated_edges)
+    end)
   end
 
   defp merge_cochanges(graph, cochanges) do

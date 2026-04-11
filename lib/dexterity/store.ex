@@ -5,7 +5,7 @@ defmodule Dexterity.Store do
 
   alias Exqlite.Basic
 
-  @schema_version 1
+  @schema_version 2
   @type db_conn :: Exqlite.Connection.t()
 
   @doc """
@@ -66,34 +66,75 @@ defmodule Dexterity.Store do
   @doc """
   Caches semantic summary rows for modules.
   """
-  @spec upsert_summary(db_conn(), String.t(), String.t(), String.t(), integer(), integer()) ::
+  @spec upsert_summary(db_conn(), String.t(), String.t(), String.t(), integer(), binary(), integer()) ::
           :ok | {:error, term()}
-  def upsert_summary(conn, file, module_name, summary, file_mtime, now) do
+  def upsert_summary(conn, file, module_name, summary, file_mtime, signature, now) do
     sql = """
-    INSERT INTO semantic_summaries (file, module, summary, file_mtime, created_at)
-    VALUES (?1, ?2, ?3, ?4, ?5)
+    INSERT INTO semantic_summaries (file, module, summary, file_mtime, signature, created_at)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6)
     ON CONFLICT(file, module) DO UPDATE SET
       summary = excluded.summary,
       file_mtime = excluded.file_mtime,
+      signature = excluded.signature,
       created_at = excluded.created_at
     """
 
-    exec!(conn, sql, [file, module_name, summary, file_mtime, now])
+    exec!(conn, sql, [file, module_name, summary, file_mtime, signature, now])
   end
 
   @doc """
   Reads cached summary for file/module.
   """
   @spec get_summary(db_conn(), String.t(), String.t()) ::
-          {:ok, nil | {String.t(), integer()}} | {:error, term()}
+          {:ok, nil | {String.t(), integer(), binary()}} | {:error, term()}
   def get_summary(conn, file, module_name) do
-    with {:ok, result} <- query_rows(conn, "SELECT summary, file_mtime FROM semantic_summaries WHERE file = ?1 AND module = ?2", [file, module_name]) do
+    with {:ok, result} <-
+           query_rows(
+             conn,
+             "SELECT summary, file_mtime, signature FROM semantic_summaries WHERE file = ?1 AND module = ?2",
+             [file, module_name]
+           ) do
       case result do
         [] ->
           {:ok, nil}
 
-        [[summary, mtime]] ->
-          {:ok, {summary, mtime}}
+        [[summary, mtime, signature]] ->
+          {:ok, {summary, mtime, signature}}
+      end
+    end
+  end
+
+  @doc """
+  Caches token signatures used for clone detection.
+  """
+  @spec upsert_token_signature(db_conn(), String.t(), String.t(), binary()) ::
+          :ok | {:error, term()}
+  def upsert_token_signature(conn, file, module_name, signature) do
+    sql = """
+    INSERT INTO token_signatures (file, module, signature)
+    VALUES (?1, ?2, ?3)
+    ON CONFLICT(file, module) DO UPDATE SET
+      signature = excluded.signature
+    """
+
+    exec!(conn, sql, [file, module_name, signature])
+  end
+
+  @doc """
+  Reads a cached token signature for a file/module pair.
+  """
+  @spec get_token_signature(db_conn(), String.t(), String.t()) ::
+          {:ok, binary() | nil} | {:error, term()}
+  def get_token_signature(conn, file, module_name) do
+    with {:ok, result} <-
+           query_rows(
+             conn,
+             "SELECT signature FROM token_signatures WHERE file = ?1 AND module = ?2",
+             [file, module_name]
+           ) do
+      case result do
+        [] -> {:ok, nil}
+        [[signature]] -> {:ok, signature}
       end
     end
   end
@@ -197,6 +238,7 @@ defmodule Dexterity.Store do
         module TEXT NOT NULL,
         summary TEXT NOT NULL,
         file_mtime INTEGER NOT NULL,
+        signature BLOB NOT NULL DEFAULT x'',
         created_at INTEGER NOT NULL,
         PRIMARY KEY (file, module)
       );
@@ -225,13 +267,33 @@ defmodule Dexterity.Store do
     ]
 
     case exec_sql_list(conn, tables) do
-      :ok -> set_schema_version(conn, @schema_version)
+      :ok ->
+        with :ok <- ensure_summary_signature_column(conn) do
+          set_schema_version(conn, @schema_version)
+        end
+
       error -> error
     end
   end
 
   defp set_schema_version(conn, version) do
     exec!(conn, "INSERT OR REPLACE INTO schema_version (version) VALUES (?1)", [version])
+  end
+
+  defp ensure_summary_signature_column(conn) do
+    with {:ok, rows} <- query_rows(conn, "PRAGMA table_info(semantic_summaries)") do
+      column_names = Enum.map(rows, fn [_cid, name | _rest] -> name end)
+
+      if "signature" in column_names do
+        :ok
+      else
+        exec!(
+          conn,
+          "ALTER TABLE semantic_summaries ADD COLUMN signature BLOB NOT NULL DEFAULT x''",
+          []
+        )
+      end
+    end
   end
 
   defp normalize_pair(a, b) when a < b, do: %{a: a, b: b}

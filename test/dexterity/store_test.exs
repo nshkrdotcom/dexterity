@@ -46,8 +46,20 @@ defmodule Dexterity.StoreTest do
   test "semantic summaries are inserted and read", %{path: path} do
     {:ok, conn} = Store.open(path)
 
-    assert :ok = Store.upsert_summary(conn, "lib/a.ex", "MyModule", "Summary", 1_700_000, 1_700_001)
-    assert {:ok, {"Summary", 1_700_000}} = Store.get_summary(conn, "lib/a.ex", "MyModule")
+    signature = <<1, 2, 3>>
+
+    assert :ok =
+             Store.upsert_summary(
+               conn,
+               "lib/a.ex",
+               "MyModule",
+               "Summary",
+               1_700_000,
+               signature,
+               1_700_001
+             )
+
+    assert {:ok, {"Summary", 1_700_000, ^signature}} = Store.get_summary(conn, "lib/a.ex", "MyModule")
 
     assert :ok = Store.close(conn)
   end
@@ -68,6 +80,16 @@ defmodule Dexterity.StoreTest do
 
     assert :ok = Store.set_meta(conn, "schema_version", "1")
     assert {:ok, "1"} = Store.get_meta(conn, "schema_version")
+
+    assert :ok = Store.close(conn)
+  end
+
+  test "token signatures are upserted and read", %{path: path} do
+    {:ok, conn} = Store.open(path)
+    signature = <<9, 8, 7>>
+
+    assert :ok = Store.upsert_token_signature(conn, "lib/a.ex", "MyModule", signature)
+    assert {:ok, ^signature} = Store.get_token_signature(conn, "lib/a.ex", "MyModule")
 
     assert :ok = Store.close(conn)
   end

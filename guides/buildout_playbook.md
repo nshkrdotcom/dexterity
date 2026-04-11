@@ -27,6 +27,10 @@
 - Improve graph enrichment + clone/use protocol rendering.
 - Final acceptance and release hygiene.
 
+Current checkpoint:
+- Graph enrichment, clone rendering, and summary cache invalidation are complete.
+- Remaining work is release hygiene and any follow-on operational tooling, not core repo-map behavior.
+
 ## Compaction rule
 
 - Re-open checklist immediately after any context switch.

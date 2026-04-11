@@ -19,6 +19,12 @@ Authoritative public API behavior for Dexterity.
 - `:graph_stale`
 - `:files`
 
+`context_opts` may also include:
+- `:graph_server`
+- `:summary_server`
+- `:store_conn`
+- `:summary_enabled`
+
 ## Query API (`Dexterity.Query`)
 
 - `find_references(module, function \\\\ nil, arity \\\\ nil, opts \\\\ []) :: {:ok, [reference_location()]} | {:error, term()}`
@@ -62,4 +68,6 @@ Authoritative public API behavior for Dexterity.
 - Explicit error tuples are preferred over silent fallback.
 - Ranking and rendering are deterministic for fixed inputs.
 - Token budgeting in `get_repo_map/1` is bounded by config.
+- Summary reads are cache-backed and only rendered when stored signature and file mtime are current.
+- Clone annotations are deterministic and suppress duplicate symbol bodies for lower-ranked matches.
 - MCP responses include `jsonrpc` and `error` payloads for non-recoverable calls.

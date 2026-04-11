@@ -21,6 +21,7 @@ dexterity-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+/.dexterity/
 
 # Editor/Language Server
 .elixir_ls/

@@ -5,6 +5,7 @@ defmodule Dexterity.SummaryWorker do
   use GenServer
 
   alias Dexterity.Config
+  alias Dexterity.Metadata
   alias Dexterity.Store
   alias Dexterity.StoreServer
 
@@ -164,13 +165,19 @@ defmodule Dexterity.SummaryWorker do
   end
 
   defp process_job(state, %{} = job) do
+    signature = Metadata.summary_signature(job.signatures)
+
     try do
       if is_nil(state.db_conn) do
         process_summary(state, job)
       else
         case Store.get_summary(state.db_conn, job.file, job.module_name) do
-          {:ok, {_, cached_mtime}} when cached_mtime >= job.mtime ->
-            :ok
+          {:ok, {_, cached_mtime, cached_signature}} ->
+            if cached_mtime >= job.mtime and cached_signature == signature do
+              :ok
+            else
+              process_summary(state, job)
+            end
 
           _ ->
             process_summary(state, job)
@@ -197,6 +204,7 @@ defmodule Dexterity.SummaryWorker do
               job.module_name,
               summary,
               job.mtime,
+              Metadata.summary_signature(job.signatures),
               System.os_time(:second)
             )
           end
@@ -218,13 +226,27 @@ defmodule Dexterity.SummaryWorker do
   end
 
   defp build_prompt(job) do
+    exported =
+      case job.signatures do
+        %{exports: exports} when is_list(exports) -> Enum.join(exports, ", ")
+        _ -> inspect(job.signatures)
+      end
+
+    moduledoc =
+      case job.signatures do
+        %{moduledoc: nil} -> "none"
+        %{moduledoc: value} -> value
+        _ -> "none"
+      end
+
     """
     Summarize this Elixir module in one short sentence (<=80 chars). Focus on
     responsibility, not implementation details.
 
-    #{job.file}
-    #{inspect(job.module_name)}
-    #{inspect(job.signatures)}
+    file: #{job.file}
+    module: #{inspect(job.module_name)}
+    moduledoc: #{moduledoc}
+    exports: #{exported}
     """
   end
 

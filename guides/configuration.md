@@ -18,8 +18,8 @@ Defaults are defined in `Dexterity.Config` and can be overridden in `config/runt
 - `:cochange_commit_depth` / `:cochange_min_frequency` / `:cochange_interval_ms`.
 - `:cochange_enabled` — enable temporal worker.
 - `:summary_enabled` — enable async semantic summary generation.
-- `:summary_signature_threshold` — currently reserved for future signature-based invalidation policy.
-- `:clone_similarity_threshold` — reserve for future clone heuristic.
+- `:summary_signature_threshold` — reserved for provider-specific future tuning; current cache invalidation already uses stored signature equality.
+- `:clone_similarity_threshold` — Jaccard threshold for deterministic clone annotations.
 - `:mcp_enabled` — feature-gate for serving MCP.
 
 ## Safe operational settings
@@ -29,6 +29,7 @@ Defaults are defined in `Dexterity.Config` and can be overridden in `config/runt
 - Production defaults should preserve back-pressure:
   - Keep `:cochange_commit_depth` bounded.
   - Keep `:min_token_budget` above your model floor.
+  - Keep `:summary_enabled` off unless an LLM provider/worker is configured.
 - If using generated CI containers, keep `:dexter_db` path writable per repo.
 
 ## Runtime override examples
