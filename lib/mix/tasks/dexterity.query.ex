@@ -11,8 +11,8 @@ defmodule Mix.Tasks.Dexterity.Query do
 
   use Mix.Task
 
-  alias Dexterity.Query
   alias Dexterity.GraphServer
+  alias Dexterity.Query
   alias Mix.Tasks.Dexterity.TaskHelpers, as: Helpers
 
   @shortdoc "Runs Dexter queries"

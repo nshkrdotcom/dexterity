@@ -2,7 +2,7 @@
 
 ## Runtime architecture
 
-- `Dexterity.Application` starts OTP supervision:
+- The application supervision tree starts:
   - `StoreServer` for metadata DB lifecycle.
   - `IndexSupervisor` with `Indexer` + `FileWatcher`.
   - `GraphServer` for graph/rank state.
@@ -16,7 +16,7 @@
    - base edges from backend
    - source-derived metadata edges from `use`, `@behaviour`, and `defimpl`
    - temporal edges from `Store`
-3. `Dexterity.Metadata` parses tracked source files for render annotations, clone tokens, and summary inputs.
+3. Internal source-analysis code parses tracked files for render annotations, clone tokens, and summary inputs.
 4. Context inputs (`active_file`, `mentioned_files`, `edited_files`) are applied as query context.
 5. `Dexterity` fetches symbols, validates cached summaries by mtime/signature, persists clone signatures, and renders deterministic map text.
 5. Mix tasks and MCP call the same public API modules.

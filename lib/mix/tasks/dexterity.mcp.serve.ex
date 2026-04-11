@@ -8,8 +8,8 @@ defmodule Mix.Tasks.Dexterity.Mcp.Serve do
 
   use Mix.Task
 
-  alias Mix.Tasks.Dexterity.TaskHelpers, as: Helpers
   alias Dexterity.Config
+  alias Mix.Tasks.Dexterity.TaskHelpers, as: Helpers
 
   @shortdoc "Starts MCP server over stdio"
 

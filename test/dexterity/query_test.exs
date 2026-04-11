@@ -1,8 +1,8 @@
 defmodule Dexterity.QueryTest do
   use ExUnit.Case
 
-  alias Dexterity.Query
   alias Dexterity.GraphServer
+  alias Dexterity.Query
 
   defmodule QueryBackend do
     @behaviour Dexterity.Backend

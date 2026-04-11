@@ -5,8 +5,8 @@ defmodule Dexterity.FileWatcher do
 
   use GenServer
 
-  alias Dexterity.Config
   alias Dexterity.Backend.Dexter
+  alias Dexterity.Config
   alias Dexterity.GraphServer
 
   @extensions [".ex", ".exs"]

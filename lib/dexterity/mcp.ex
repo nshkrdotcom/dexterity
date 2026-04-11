@@ -2,7 +2,7 @@ defmodule Dexterity.MCP do
   @moduledoc """
   Deterministic JSON-RPC/MCP transport over stdio.
   """
-  alias Dexterity.{Config, Query, GraphServer}
+  alias Dexterity.{Config, GraphServer, Query}
 
   @jsonrpc "2.0"
   @parse_error -32_700
@@ -366,15 +366,13 @@ defmodule Dexterity.MCP do
   defp safe_module(nil, default), do: default
 
   defp safe_module(value, default) do
-    try do
-      if is_atom(value) do
-        value
-      else
-        Module.concat([value])
-      end
-    rescue
-      _ -> default
+    if is_atom(value) do
+      value
+    else
+      Module.concat([value])
     end
+  rescue
+    _ -> default
   end
 
   defp response(nil, _result), do: %{}

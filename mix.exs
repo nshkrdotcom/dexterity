@@ -37,7 +37,7 @@ defmodule Dexterity.MixProject do
       name: "dexterity",
       licenses: ["MIT"],
       links: %{"GitHub" => @repo_url},
-      files: ~w(lib assets mix.exs README.md LICENSE CHANGELOG.md guides)
+      files: ~w(lib assets examples mix.exs README.md LICENSE CHANGELOG.md guides)
     ]
   end
 
@@ -63,10 +63,11 @@ defmodule Dexterity.MixProject do
 
   defp docs do
     [
-      main: "README",
+      main: "guide",
       logo: "assets/dexterity.svg",
       extras: [
-        "README.md": [title: "Guide"],
+        "README.md": [filename: "guide", title: "Guide"],
+        "examples/README.md": [filename: "examples", title: "Examples"],
         "guides/overview.md": [title: "Overview"],
         "guides/quickstart.md": [title: "Quickstart"],
         "guides/architecture.md": [title: "Architecture"],
@@ -83,6 +84,7 @@ defmodule Dexterity.MixProject do
       ],
       groups_for_extras: [
         "Dexterity Guide": ~r/README.md/,
+        Examples: ~r/^examples\//,
         "Developer Guides": ~r/^guides\//,
         Maintenance: ~r/CHANGELOG.md|LICENSE/
       ],

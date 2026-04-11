@@ -1,7 +1,7 @@
 # Configuration
 
 Dexterity reads its runtime settings from the application environment for `:dexterity`.
-Defaults are defined in `Dexterity.Config` and can be overridden in `config/runtime.exs` or before any task/API call.
+Default values are provided by the library and can be overridden in `config/runtime.exs` or before any task/API call.
 
 ## Core values
 

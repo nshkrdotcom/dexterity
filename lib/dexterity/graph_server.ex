@@ -7,9 +7,9 @@ defmodule Dexterity.GraphServer do
 
   alias Dexterity.Config
   alias Dexterity.Metadata
-  alias Dexterity.StoreServer
   alias Dexterity.PageRank
   alias Dexterity.Store
+  alias Dexterity.StoreServer
 
   @type state :: %{
           repo_root: String.t(),

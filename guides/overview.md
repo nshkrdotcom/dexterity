@@ -16,7 +16,7 @@ Dexterity is an Elixir OTP library that builds ranked, context-aware codebase sn
 - `Dexterity` public API for repo map, symbols, dependencies, and status.
 - `Dexterity.Backend` behavior to abstract Dexter and future providers.
 - `Dexterity.GraphServer` for graph/rank state and stale invalidation.
-- `Dexterity.Metadata` for source-derived graph enrichment, clone tokens, and summary inputs.
+- Internal source-analysis components for graph enrichment, clone tokens, and summary inputs.
 - `Dexterity.Store` for metadata tables (`cochanges`, `semantic_summaries`, `pagerank_cache`, `token_signatures`, `index_meta`).
 - `Dexterity.CochangeWorker` for git-based temporal edges.
 - `Dexterity.SummaryWorker` for cached LLM summary generation with mtime/signature invalidation.
