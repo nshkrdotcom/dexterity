@@ -7,6 +7,7 @@
 <p align="center">
   <a href="https://github.com/nshkrdotcom/dexterity">
     <img src="https://img.shields.io/badge/github-nshkrdotcom/dexterity-181717?logo=github&style=flat-square" alt="GitHub">
+[![SafeSkill 93/100](https://img.shields.io/badge/SafeSkill-93%2F100_Verified%20Safe-brightgreen)](https://safeskill.dev/scan/nshkrdotcom-dexterity)
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License">
