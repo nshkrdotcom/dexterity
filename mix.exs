@@ -37,7 +37,7 @@ defmodule Dexterity.MixProject do
       name: "dexterity",
       licenses: ["MIT"],
       links: %{"GitHub" => @repo_url},
-      files: ~w(lib assets mix.exs README.md LICENSE CHANGELOG.md)
+      files: ~w(lib assets mix.exs README.md LICENSE CHANGELOG.md guides)
     ]
   end
 
@@ -66,11 +66,21 @@ defmodule Dexterity.MixProject do
       logo: "assets/dexterity.svg",
       extras: [
         "README.md": [title: "Guide"],
+        "guides/overview.md": [title: "Overview"],
+        "guides/quickstart.md": [title: "Quickstart"],
+        "guides/architecture.md": [title: "Architecture"],
+        "guides/api_reference.md": [title: "API Reference"],
+        "guides/configuration.md": [title: "Configuration"],
+        "guides/testing_and_quality.md": [title: "Testing + Quality"],
+        "guides/operations.md": [title: "Operations"],
+        "guides/buildout_playbook.md": [title: "Buildout Playbook"],
+        "guides/roadmap.md": [title: "Roadmap"],
         "CHANGELOG.md": [title: "Changelog"],
         LICENSE: [title: "License"]
       ],
       groups_for_extras: [
-        Documentation: ~r/README.md/,
+        "Dexterity Guide": ~r/README.md/,
+        "Developer Guides": ~r/^guides\//,
         Maintenance: ~r/CHANGELOG.md|LICENSE/
       ],
       skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
