@@ -1,6 +1,7 @@
 defmodule Mix.Tasks.Dexterity.TaskHelpers do
   @moduledoc false
 
+  alias Dexterity.ApplicationControl
   alias Dexterity.Config
 
   @task_repo_root_key :repo_root
@@ -20,7 +21,7 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
   @spec ensure_started!() :: :ok
   def ensure_started! do
     if Process.whereis(Dexterity.Supervisor) do
-      Application.stop(:dexterity)
+      ApplicationControl.stop_quietly(:dexterity)
     end
 
     Mix.Task.reenable("app.start")

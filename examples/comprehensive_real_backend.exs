@@ -1,4 +1,5 @@
 defmodule Examples.ComprehensiveRealBackend do
+  alias Dexterity.ApplicationControl
   alias Dexterity
   alias Dexterity.MCP
   alias Dexterity.Query
@@ -134,7 +135,7 @@ defmodule Examples.ComprehensiveRealBackend do
       run_mcp_demo(repo_root)
     after
       if Process.whereis(Dexterity.Supervisor) do
-        Application.stop(:dexterity)
+        ApplicationControl.stop_quietly(:dexterity)
       end
 
       restore_config(previous)
@@ -192,7 +193,7 @@ defmodule Examples.ComprehensiveRealBackend do
 
   defp start_dexterity! do
     if Process.whereis(Dexterity.Supervisor) do
-      :ok = Application.stop(:dexterity)
+      :ok = ApplicationControl.stop_quietly(:dexterity)
     end
 
     {:ok, _apps} = Application.ensure_all_started(:dexterity)
