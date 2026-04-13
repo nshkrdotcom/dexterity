@@ -40,7 +40,10 @@ defmodule Dexterity do
           store_conn: Dexterity.Store.db_conn() | nil,
           summary_enabled: boolean(),
           changed_files: [String.t()],
-          changed_symbols: [map()]
+          changed_symbols: [map()],
+          temporary_server_stop_timeout: timeout(),
+          graph_server_module: module(),
+          symbol_graph_server_module: module()
         ]
 
   @type status_snapshot :: %{
@@ -719,9 +722,10 @@ defmodule Dexterity do
       :error ->
         backend = Keyword.get(opts, :backend, Config.fetch(:backend))
         repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
+        graph_server_module = Keyword.get(opts, :graph_server_module, GraphServer)
 
         {:ok, pid} =
-          GraphServer.start_link(
+          graph_server_module.start_link(
             repo_root: repo_root,
             backend: backend,
             store_conn: store_conn(opts),
@@ -732,7 +736,7 @@ defmodule Dexterity do
           ensure_file_graph_loaded(pid)
           fun.(pid)
         after
-          GenServer.stop(pid, :normal, 5_000)
+          stop_temporary_server(pid, opts)
         end
     end
   end
@@ -788,14 +792,17 @@ defmodule Dexterity do
         backend = Keyword.get(opts, :backend, Config.fetch(:backend))
         repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
 
+        symbol_graph_server_module =
+          Keyword.get(opts, :symbol_graph_server_module, SymbolGraphServer)
+
         {:ok, pid} =
-          SymbolGraphServer.start_link(repo_root: repo_root, backend: backend, name: nil)
+          symbol_graph_server_module.start_link(repo_root: repo_root, backend: backend, name: nil)
 
         try do
           ensure_symbol_graph_loaded(pid)
           fun.(pid)
         after
-          GenServer.stop(pid, :normal, 5_000)
+          stop_temporary_server(pid, opts)
         end
     end
   end
@@ -836,6 +843,46 @@ defmodule Dexterity do
     _ = SymbolGraphServer.get_nodes(server)
     _ = SymbolGraphServer.get_baseline_rank(server)
     :ok
+  end
+
+  defp stop_temporary_server(pid, opts) do
+    timeout = Keyword.get(opts, :temporary_server_stop_timeout, 30_000)
+
+    try do
+      GenServer.stop(pid, :normal, timeout)
+    catch
+      :exit, reason ->
+        if stop_timeout_exit?(pid, timeout, reason) do
+          Process.unlink(pid)
+          Process.exit(pid, :kill)
+          wait_for_process_exit(pid)
+        else
+          :erlang.raise(:exit, reason, __STACKTRACE__)
+        end
+    end
+  end
+
+  defp stop_timeout_exit?(
+         pid,
+         timeout,
+         {:timeout, {GenServer, :stop, [stopped_pid, :normal, stopped_timeout]}}
+       ) do
+    pid == stopped_pid and timeout == stopped_timeout
+  end
+
+  defp stop_timeout_exit?(_pid, _timeout, _reason), do: false
+
+  defp wait_for_process_exit(pid, attempts \\ 100)
+
+  defp wait_for_process_exit(_pid, 0), do: :ok
+
+  defp wait_for_process_exit(pid, attempts) do
+    if Process.alive?(pid) do
+      Process.sleep(10)
+      wait_for_process_exit(pid, attempts - 1)
+    else
+      :ok
+    end
   end
 
   defp context_files(opts) do

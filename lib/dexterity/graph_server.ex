@@ -35,19 +35,19 @@ defmodule Dexterity.GraphServer do
   end
 
   def get_repo_map(server \\ __MODULE__, context_files \\ [], opts \\ []) do
-    GenServer.call(server, {:get_repo_map, context_files, opts}, 60_000)
+    GenServer.call(server, {:get_repo_map, context_files, opts}, call_timeout(opts))
   end
 
-  def get_adjacency(server \\ __MODULE__) do
-    GenServer.call(server, :get_adjacency, 60_000)
+  def get_adjacency(server \\ __MODULE__, opts \\ []) do
+    GenServer.call(server, :get_adjacency, call_timeout(opts))
   end
 
-  def get_metadata(server \\ __MODULE__) do
-    GenServer.call(server, :get_metadata, 60_000)
+  def get_metadata(server \\ __MODULE__, opts \\ []) do
+    GenServer.call(server, :get_metadata, call_timeout(opts))
   end
 
-  def get_baseline_rank(server \\ __MODULE__) do
-    GenServer.call(server, :get_baseline_rank, 60_000)
+  def get_baseline_rank(server \\ __MODULE__, opts \\ []) do
+    GenServer.call(server, :get_baseline_rank, call_timeout(opts))
   end
 
   def mark_stale(server \\ __MODULE__) do
@@ -153,6 +153,14 @@ defmodule Dexterity.GraphServer do
 
   defp maybe_take(scores, nil), do: scores
   defp maybe_take(scores, limit), do: Enum.take(scores, limit)
+
+  defp call_timeout(opts) do
+    Keyword.get(
+      opts,
+      :timeout,
+      Config.fetch(:server_call_timeout, Config.fetch(:server_call_timeout_ms, :infinity))
+    )
+  end
 
   defp normalize_context_files(context_files) do
     context_files

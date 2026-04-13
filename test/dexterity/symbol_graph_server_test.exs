@@ -90,6 +90,62 @@ defmodule Dexterity.SymbolGraphServerTest do
     end
   end
 
+  defmodule SlowSymbolBackend do
+    @behaviour Dexterity.Backend
+
+    @impl true
+    def list_file_edges(_repo_root), do: {:ok, []}
+
+    @impl true
+    def list_file_nodes(_repo_root), do: {:ok, ["lib/a.ex"]}
+
+    @impl true
+    def list_exported_symbols(_repo_root, _file), do: {:ok, []}
+
+    @impl true
+    def find_definition(_repo_root, _module, _function, _arity), do: {:error, :not_found}
+
+    @impl true
+    def find_references(_repo_root, _module, _function, _arity), do: {:ok, []}
+
+    @impl true
+    def reindex_file(_file, _opts), do: :ok
+
+    @impl true
+    def cold_index(_repo_root, _opts), do: :ok
+
+    @impl true
+    def index_status(_repo_root), do: {:ok, :ready}
+
+    @impl true
+    def healthy?(_repo_root), do: {:ok, true}
+
+    @impl true
+    def list_symbol_nodes(_repo_root) do
+      Process.sleep(50)
+
+      {:ok,
+       [
+         %{
+           module: "A",
+           function: "run",
+           arity: 0,
+           file: "lib/a.ex",
+           line: 1,
+           visibility: :public,
+           signature: "def run()",
+           kind: "def"
+         }
+       ]}
+    end
+
+    @impl true
+    def list_symbol_edges(_repo_root) do
+      Process.sleep(50)
+      {:ok, []}
+    end
+  end
+
   setup do
     name = Module.concat(__MODULE__, :"SymbolGraph#{System.unique_integer([:positive])}")
 
@@ -158,5 +214,32 @@ defmodule Dexterity.SymbolGraphServerTest do
 
     assert [%{file: "lib/a.ex", function: "run"} | _] = ranked
     assert Enum.any?(ranked, &(&1.file == "lib/b.ex" and &1.function == "calculate"))
+  end
+
+  test "supports longer call timeouts for slow symbol graph builds" do
+    name = Module.concat(__MODULE__, :"SlowSymbolGraph#{System.unique_integer([:positive])}")
+
+    repo_root =
+      Path.join(System.tmp_dir!(), "dexterity-slow-symbol-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(repo_root)
+
+    start_supervised!(
+      Supervisor.child_spec(
+        {SymbolGraphServer,
+         [
+           repo_root: repo_root,
+           backend: SlowSymbolBackend,
+           name: name
+         ]},
+        id: name
+      )
+    )
+
+    on_exit(fn -> File.rm_rf!(repo_root) end)
+
+    assert catch_exit(SymbolGraphServer.get_nodes(name, timeout: 10))
+    assert nodes = SymbolGraphServer.get_nodes(name, timeout: 500)
+    assert Enum.any?(nodes, fn {_id, symbol} -> symbol.module == "A" end)
   end
 end

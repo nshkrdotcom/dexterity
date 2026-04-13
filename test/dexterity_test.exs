@@ -357,6 +357,42 @@ defmodule DexterityTest do
     def healthy?(_repo_root), do: {:ok, true}
   end
 
+  defmodule SlowStopGraphServer do
+    use GenServer
+
+    def start_link(opts) do
+      GenServer.start_link(__MODULE__, opts)
+    end
+
+    @impl true
+    def init(opts) do
+      {:ok,
+       %{
+         repo_root: Keyword.fetch!(opts, :repo_root),
+         backend: Keyword.fetch!(opts, :backend),
+         ranked: [{"lib/slow_stop.ex", 1.0}],
+         terminate_delay_ms: Keyword.get(opts, :terminate_delay_ms, 50)
+       }}
+    end
+
+    @impl true
+    def handle_call(:get_metadata, _from, state), do: {:reply, %{}, state}
+
+    @impl true
+    def handle_call(:get_baseline_rank, _from, state), do: {:reply, %{}, state}
+
+    @impl true
+    def handle_call({:get_repo_map, _context_files, _opts}, _from, state) do
+      {:reply, {:ok, state.ranked}, state}
+    end
+
+    @impl true
+    def terminate(_reason, state) do
+      Process.sleep(state.terminate_delay_ms)
+      :ok
+    end
+  end
+
   test "notify_file_changed delegates to injected backend and marks graph stale" do
     assert Dexterity.notify_file_changed("lib/a.ex", backend: StubBackend) == :ok
   end
@@ -619,6 +655,20 @@ defmodule DexterityTest do
 
     assert length(filtered) == 2
     assert Enum.all?(filtered, fn {path, _score} -> String.starts_with?(path, "lib/") end)
+  end
+
+  test "get_ranked_files force stops a temporary graph server when graceful shutdown times out" do
+    repo_root = runtime_repo_root()
+
+    assert {:ok, [{"lib/slow_stop.ex", 1.0}]} =
+             Dexterity.get_ranked_files(
+               backend: StubBackend,
+               repo_root: repo_root,
+               graph_server: :missing_graph_server,
+               graph_server_module: SlowStopGraphServer,
+               temporary_server_stop_timeout: 10,
+               limit: 1
+             )
   end
 
   test "get_repo_map shrinks auto budget for long conversations" do

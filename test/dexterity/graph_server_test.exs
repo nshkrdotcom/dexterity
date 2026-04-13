@@ -107,6 +107,43 @@ defmodule Dexterity.GraphServerTest do
     def healthy?(_repo_root), do: {:ok, true}
   end
 
+  defmodule SlowBackend do
+    @behaviour Dexterity.Backend
+
+    @impl true
+    def list_file_edges(_repo_root) do
+      Process.sleep(50)
+      {:ok, [{"lib/a.ex", "lib/b.ex", 1.0}]}
+    end
+
+    @impl true
+    def list_file_nodes(_repo_root) do
+      Process.sleep(50)
+      {:ok, ["lib/a.ex", "lib/b.ex"]}
+    end
+
+    @impl true
+    def list_exported_symbols(_repo_root, _file), do: {:ok, []}
+
+    @impl true
+    def find_definition(_repo_root, _module, _function, _arity), do: {:error, :not_found}
+
+    @impl true
+    def find_references(_repo_root, _module, _function, _arity), do: {:ok, []}
+
+    @impl true
+    def reindex_file(_file, _opts), do: :ok
+
+    @impl true
+    def cold_index(_repo_root, _opts), do: :ok
+
+    @impl true
+    def index_status(_repo_root), do: {:ok, :ready}
+
+    @impl true
+    def healthy?(_repo_root), do: {:ok, true}
+  end
+
   setup do
     name = Module.concat(__MODULE__, :"GraphServer#{:erlang.unique_integer([:positive])}")
 
@@ -154,6 +191,35 @@ defmodule Dexterity.GraphServerTest do
 
     assert {:ok, _ranks} = GraphServer.get_repo_map(server, [], limit: 10)
     assert %{stale: false} = :sys.get_state(server) |> Map.take([:stale])
+  end
+
+  test "supports longer call timeouts for slow graph builds" do
+    name = Module.concat(__MODULE__, :"SlowGraph#{System.unique_integer([:positive])}")
+
+    repo_root =
+      Path.join(System.tmp_dir!(), "dexterity-slow-graph-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(repo_root)
+
+    start_supervised!(
+      Supervisor.child_spec(
+        {GraphServer,
+         [
+           repo_root: repo_root,
+           backend: SlowBackend,
+           store_conn: nil,
+           name: name
+         ]},
+        id: name
+      )
+    )
+
+    on_exit(fn -> File.rm_rf!(repo_root) end)
+
+    assert catch_exit(GraphServer.get_metadata(name, timeout: 10))
+
+    assert %{"lib/a.ex" => _metadata, "lib/b.ex" => _metadata2} =
+             GraphServer.get_metadata(name, timeout: 500)
   end
 
   test "adds use, behaviour, and sibling implementation edges from source metadata" do

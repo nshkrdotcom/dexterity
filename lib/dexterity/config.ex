@@ -25,6 +25,7 @@ defmodule Dexterity.Config do
     summary_enabled: false,
     summary_signature_threshold: 0.85,
     clone_similarity_threshold: 0.90,
+    server_call_timeout: :infinity,
     token_model: "gpt-4",
     mcp_enabled: false
   ]

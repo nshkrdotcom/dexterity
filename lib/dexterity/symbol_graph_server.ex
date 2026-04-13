@@ -46,27 +46,27 @@ defmodule Dexterity.SymbolGraphServer do
   @spec get_ranked_symbols(GenServer.server(), ranking_context(), keyword()) ::
           {:ok, [map()]} | {:error, term()}
   def get_ranked_symbols(server \\ __MODULE__, context \\ %{}, opts \\ []) do
-    GenServer.call(server, {:get_ranked_symbols, context, opts}, 60_000)
+    GenServer.call(server, {:get_ranked_symbols, context, opts}, call_timeout(opts))
   end
 
   @spec get_adjacency(GenServer.server()) :: %{String.t() => %{String.t() => float()}}
-  def get_adjacency(server \\ __MODULE__) do
-    GenServer.call(server, :get_adjacency, 60_000)
+  def get_adjacency(server \\ __MODULE__, opts \\ []) do
+    GenServer.call(server, :get_adjacency, call_timeout(opts))
   end
 
   @spec get_nodes(GenServer.server()) :: %{String.t() => map()}
-  def get_nodes(server \\ __MODULE__) do
-    GenServer.call(server, :get_nodes, 60_000)
+  def get_nodes(server \\ __MODULE__, opts \\ []) do
+    GenServer.call(server, :get_nodes, call_timeout(opts))
   end
 
   @spec get_source_snippets(GenServer.server()) :: %{String.t() => String.t()}
-  def get_source_snippets(server \\ __MODULE__) do
-    GenServer.call(server, :get_source_snippets, 60_000)
+  def get_source_snippets(server \\ __MODULE__, opts \\ []) do
+    GenServer.call(server, :get_source_snippets, call_timeout(opts))
   end
 
   @spec get_baseline_rank(GenServer.server()) :: %{String.t() => float()}
-  def get_baseline_rank(server \\ __MODULE__) do
-    GenServer.call(server, :get_baseline_rank, 60_000)
+  def get_baseline_rank(server \\ __MODULE__, opts \\ []) do
+    GenServer.call(server, :get_baseline_rank, call_timeout(opts))
   end
 
   @spec mark_stale(GenServer.server()) :: :ok
@@ -201,6 +201,14 @@ defmodule Dexterity.SymbolGraphServer do
 
   defp maybe_take(scores, nil), do: scores
   defp maybe_take(scores, limit), do: Enum.take(scores, limit)
+
+  defp call_timeout(opts) do
+    Keyword.get(
+      opts,
+      :timeout,
+      Config.fetch(:server_call_timeout, Config.fetch(:server_call_timeout_ms, :infinity))
+    )
+  end
 
   defp normalize_conversation_terms(nil), do: []
 
