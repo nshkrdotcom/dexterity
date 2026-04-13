@@ -27,3 +27,4 @@ dexterity-*.tar
 .elixir_ls/
 .lexical/
 .fetch/
+.dexter.db

@@ -385,6 +385,12 @@ defmodule Dexterity.MCP do
     Enum.map(list, &normalize_result/1)
   end
 
+  defp normalize_result(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> normalize_result()
+  end
+
   defp normalize_result(other), do: other
 
   defp tool_opts(params, context) do
@@ -404,26 +410,22 @@ defmodule Dexterity.MCP do
   end
 
   defp map_query_opts(params, context) do
-    active_file = get_optional(params, "active_file") || get_optional(params, "activeFile")
-
-    mentioned_files =
-      parse_file_list(
-        get_optional(params, "mentioned_files") || get_optional(params, "mentionedFiles")
-      )
-
-    edited_files =
-      parse_file_list(get_optional(params, "edited_files") || get_optional(params, "editedFiles"))
-
-    conversation_terms =
-      parse_file_list(
-        get_optional(params, "conversation_terms") || get_optional(params, "conversationTerms")
-      )
+    active_file = get_optional_either(params, "active_file", "activeFile")
+    mentioned_files = parse_file_list_opt(params, "mentioned_files", "mentionedFiles")
+    edited_files = parse_file_list_opt(params, "edited_files", "editedFiles")
+    conversation_terms = parse_file_list_opt(params, "conversation_terms", "conversationTerms")
+    include_prefixes = parse_file_list_opt(params, "include_prefixes", "includePrefixes")
+    exclude_prefixes = parse_file_list_opt(params, "exclude_prefixes", "excludePrefixes")
 
     repo_root = get_optional(params, "repo_root") || context.repo_root
     backend = safe_module(get_optional(params, "backend"), context.backend)
     limit = parse_integer(get_optional(params, "limit"), fallback: 25)
     token_budget = get_optional(params, "token_budget")
     conversation_tokens = get_optional(params, "conversation_tokens")
+
+    overscan_limit =
+      parse_integer(get_optional_either(params, "overscan_limit", "overscanLimit"), fallback: nil)
+
     min_rank = parse_float(get_optional(params, "min_rank"), fallback: 0.0)
 
     include_clones =
@@ -441,6 +443,9 @@ defmodule Dexterity.MCP do
       mentioned_files: mentioned_files,
       edited_files: edited_files,
       conversation_terms: conversation_terms,
+      include_prefixes: include_prefixes,
+      exclude_prefixes: exclude_prefixes,
+      overscan_limit: overscan_limit,
       graph_server: context.graph_server,
       symbol_graph_server: Map.get(context, :symbol_graph_server, SymbolGraphServer)
     ]
@@ -469,6 +474,12 @@ defmodule Dexterity.MCP do
   defp parse_file_list(value) when is_list(value), do: value
   defp parse_file_list(value) when is_binary(value), do: String.split(value, ",", trim: true)
   defp parse_file_list(_), do: []
+
+  defp parse_file_list_opt(params, snake_key, camel_key) do
+    params
+    |> get_optional_either(snake_key, camel_key)
+    |> parse_file_list()
+  end
 
   defp parse_integer(nil, fallback: fallback), do: fallback
 
@@ -526,6 +537,10 @@ defmodule Dexterity.MCP do
   end
 
   defp get_optional(_, _), do: nil
+
+  defp get_optional_either(map, primary_key, fallback_key) do
+    get_optional(map, primary_key) || get_optional(map, fallback_key)
+  end
 
   defp safe_module(nil, default), do: default
 

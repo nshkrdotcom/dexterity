@@ -10,6 +10,9 @@ defmodule Mix.Tasks.Dexterity.Query do
       mix dexterity.query cochanges <file> [--limit N]
       mix dexterity.query symbols <query> [--limit N]
       mix dexterity.query files <sql_like_pattern> [--limit N]
+      mix dexterity.query ranked_files [--active-file path] [--mentioned-file path] [--edited-file path]
+                                     [--include-prefix path] [--exclude-prefix path]
+                                     [--overscan-limit N] [--limit N]
       mix dexterity.query file_graph
       mix dexterity.query symbol_graph
       mix dexterity.query structural_snapshot [--include-export-analysis] [--include-runtime-observations]
@@ -44,6 +47,9 @@ defmodule Mix.Tasks.Dexterity.Query do
           active_file: :string,
           mentioned_file: :keep,
           edited_file: :keep,
+          include_prefix: :keep,
+          exclude_prefix: :keep,
+          overscan_limit: :integer,
           changed_file: :keep,
           include_export_analysis: :boolean,
           include_runtime_observations: :boolean
@@ -56,7 +62,7 @@ defmodule Mix.Tasks.Dexterity.Query do
     if args == [] do
       Helpers.exit_with_error(
         "missing subcommand",
-        "expected references|definition|blast|blast_count|cochanges|symbols|files|file_graph|symbol_graph|structural_snapshot|runtime_observations|ranked_symbols|impact_context|export_analysis|unused_exports|test_only_exports"
+        "expected references|definition|blast|blast_count|cochanges|symbols|files|ranked_files|file_graph|symbol_graph|structural_snapshot|runtime_observations|ranked_symbols|impact_context|export_analysis|unused_exports|test_only_exports"
       )
     end
 
@@ -97,6 +103,7 @@ defmodule Mix.Tasks.Dexterity.Query do
   defp dispatch_command("cochanges", params, opts), do: run_cochanges(params, opts)
   defp dispatch_command("symbols", params, opts), do: run_symbol_search(params, opts)
   defp dispatch_command("files", params, opts), do: run_file_match(params, opts)
+  defp dispatch_command("ranked_files", params, opts), do: run_ranked_files(params, opts)
   defp dispatch_command("file_graph", params, opts), do: run_file_graph(params, opts)
   defp dispatch_command("symbol_graph", params, opts), do: run_symbol_graph(params, opts)
 
@@ -246,6 +253,21 @@ defmodule Mix.Tasks.Dexterity.Query do
 
   defp run_file_match(_params, _opts),
     do: Helpers.exit_with_error("files query accepts exactly one pattern", nil)
+
+  defp run_ranked_files([], opts) do
+    query_opts = ranked_file_opts(opts)
+
+    case Dexterity.get_ranked_files(query_opts) do
+      {:ok, result} ->
+        render_query_result(:ranked_files, result)
+
+      {:error, reason} ->
+        Helpers.exit_with_error("ranked_files query failed", reason)
+    end
+  end
+
+  defp run_ranked_files(_params, _opts),
+    do: Helpers.exit_with_error("ranked_files does not accept positional arguments", nil)
 
   defp run_file_graph([], opts) do
     query_opts = [
@@ -429,6 +451,22 @@ defmodule Mix.Tasks.Dexterity.Query do
       mentioned_files: Helpers.parse_file_list(opts, :mentioned_file),
       edited_files: Helpers.parse_file_list(opts, :edited_file)
     ]
+  end
+
+  defp ranked_file_opts(opts) do
+    [
+      graph_server: GraphServer,
+      backend: Helpers.parse_backend(opts),
+      repo_root: Helpers.parse_repo_root(opts),
+      limit: Helpers.parse_limit(opts),
+      active_file: Keyword.get(opts, :active_file),
+      mentioned_files: Helpers.parse_file_list(opts, :mentioned_file),
+      edited_files: Helpers.parse_file_list(opts, :edited_file),
+      include_prefixes: Helpers.parse_file_list(opts, :include_prefix),
+      exclude_prefixes: Helpers.parse_file_list(opts, :exclude_prefix),
+      overscan_limit: Keyword.get(opts, :overscan_limit)
+    ]
+    |> Enum.reject(fn {_key, value} -> value in [nil, ""] or value == [] end)
   end
 
   defp query_params([module_name]), do: {module_name, nil, nil}

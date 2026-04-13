@@ -2,7 +2,24 @@
 
 Dexterity ships with runnable examples intended to shorten the time from install to first useful output.
 
-## Included Example
+## Included Examples
+
+### `ranked_files_surface.exs`
+
+Run it with:
+
+```bash
+mix run examples/ranked_files_surface.exs
+```
+
+This is the focused ranked-files example. It uses a deterministic in-script backend to show the exact public surface for:
+
+- raw ranked files, where `deps/` can dominate the result
+- first-party filtering through `Dexterity.get_ranked_files/1`
+- the matching `mix dexterity.query ranked_files` flags
+- the matching MCP `get_ranked_files` arguments
+
+Start here if you want to validate the first-party filtering contract without depending on an external `dexter` binary.
 
 ### `comprehensive_real_backend.exs`
 
@@ -20,8 +37,8 @@ This example is intentionally real. It requires a working `dexter` binary on `PA
 - starts Dexterity with `Dexterity.Backend.Dexter`
 - lets the real cochange worker ingest git history
 - imports real OTP `:cover` observations for a compiled runtime probe module
-- exercises the mix-task surface in-process, including structural snapshot export, symbol search, file matching, blast-count lookup, and callback-aware export analysis
-- exercises the main public APIs, including file/symbol graph snapshots, term-aware ranking, symbol ranking, adaptive impact context, callback-aware export analysis, runtime observations, and runtime confirmation
+- exercises the mix-task surface in-process, including first-party ranked-file selection, structural snapshot export, symbol search, file matching, blast-count lookup, and callback-aware export analysis
+- exercises the main public APIs, including first-party ranked-file selection, file/symbol graph snapshots, term-aware ranking, symbol ranking, adaptive impact context, callback-aware export analysis, runtime observations, and runtime confirmation
 - sends live JSON-RPC requests through the MCP transport layer for the same runtime surface
 
 Use it to validate your local Dexter + Dexterity setup against a disposable repo before pointing Dexterity at a larger project.

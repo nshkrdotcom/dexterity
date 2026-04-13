@@ -23,7 +23,7 @@ Dexterity is also the right structural kernel to build on if you plan to add a s
 ## What You Get
 
 - `Dexterity.get_repo_map/1` for ranked, prompt-ready repository context.
-- `Dexterity.get_ranked_files/1` with active-file, edit, and conversation-term ranking inputs.
+- `Dexterity.get_ranked_files/1` with active-file, edit, conversation-term, and first-party prefix filtering inputs.
 - `Dexterity.get_ranked_symbols/1` for symbol-level ranking over the same repo state.
 - `Dexterity.get_impact_context/1` for adaptive, diff-aware symbol context.
 - `Dexterity.get_file_graph_snapshot/1`, `Dexterity.get_symbol_graph_snapshot/1`, and `Dexterity.get_structural_snapshot/1` for stable structural exports.
@@ -149,6 +149,7 @@ mix dexterity.query blast_count lib/my_app/accounts.ex --repo-root .
 mix dexterity.query cochanges lib/my_app/accounts.ex --repo-root . --limit 10
 mix dexterity.query symbols refund --repo-root .
 mix dexterity.query files '%accounts%' --repo-root .
+mix dexterity.query ranked_files --repo-root . --active-file lib/my_app/accounts.ex --include-prefix lib/ --include-prefix test/ --include-prefix mix.exs --exclude-prefix deps/ --overscan-limit 200 --limit 10
 mix dexterity.query file_graph --repo-root .
 mix dexterity.query symbol_graph --repo-root .
 mix dexterity.query runtime_observations --repo-root .
@@ -203,6 +204,17 @@ mix dexterity.query test_only_exports --repo-root .
     "%accounts%",
     repo_root: "/workspace/my_app",
     backend: Dexterity.Backend.Dexter
+  )
+
+{:ok, ranked_files} =
+  Dexterity.get_ranked_files(
+    repo_root: "/workspace/my_app",
+    backend: Dexterity.Backend.Dexter,
+    active_file: "lib/my_app/accounts.ex",
+    include_prefixes: ["lib/", "test/", "mix.exs"],
+    exclude_prefixes: ["deps/"],
+    overscan_limit: 200,
+    limit: 12
   )
 
 {:ok, file_graph} =
@@ -298,14 +310,21 @@ Supported tools include:
 
 ## Examples
 
-Start with the runnable example:
+Start with the focused ranked-files example if you want to validate first-party file selection:
+
+```bash
+mix run examples/ranked_files_surface.exs
+```
+
+Then run the full real-backend example:
 
 ```bash
 mix run examples/comprehensive_real_backend.exs
 ```
 
-That example shows:
+Together, the examples show:
 
+- first-party ranked-file filtering across API, Mix, and MCP surfaces
 - real Dexter indexing through `mix dexterity.index`
 - live mix-task status, map, and query execution
 - real git-driven cochange ingestion

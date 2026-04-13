@@ -27,6 +27,9 @@ defmodule Dexterity do
           conversation_tokens: non_neg_integer(),
           token_budget: pos_integer() | :auto,
           include_clones: boolean(),
+          include_prefixes: [String.t()],
+          exclude_prefixes: [String.t()],
+          overscan_limit: pos_integer(),
           min_rank: float(),
           limit: pos_integer(),
           backend: module(),
@@ -152,6 +155,7 @@ defmodule Dexterity do
   @spec get_ranked_files(context_opts()) :: {:ok, [{String.t(), float()}]} | {:error, term()}
   def get_ranked_files(opts \\ []) do
     limit = Keyword.get(opts, :limit, 200)
+    fetch_limit = ranked_fetch_limit(limit, opts)
 
     context_files = context_files(opts)
     conversation_terms = Keyword.get(opts, :conversation_terms, [])
@@ -161,11 +165,14 @@ defmodule Dexterity do
              GraphServer.get_repo_map(
                resolved_graph_server,
                context_files,
-               limit: limit,
+               limit: fetch_limit,
                conversation_terms: conversation_terms
              ),
            {:ok, ranked_list} <- normalize_ranked(ranked, Keyword.get(opts, :min_rank, 0.0)) do
-        {:ok, ranked_list}
+        ranked_list
+        |> filter_ranked_files(opts)
+        |> Enum.take(limit)
+        |> then(&{:ok, &1})
       else
         {:error, reason} -> {:error, reason}
       end
@@ -573,6 +580,59 @@ defmodule Dexterity do
     ranked = if is_map(ranked), do: Enum.to_list(ranked), else: ranked
     filtered = Enum.filter(ranked, fn {_file, rank} -> rank >= min_rank end)
     {:ok, filtered}
+  end
+
+  defp filter_ranked_files(ranked, opts) do
+    include_prefixes = normalize_prefixes(Keyword.get(opts, :include_prefixes, []))
+    exclude_prefixes = normalize_prefixes(Keyword.get(opts, :exclude_prefixes, []))
+
+    if include_prefixes == [] and exclude_prefixes == [] do
+      ranked
+    else
+      Enum.filter(ranked, fn {file, _score} ->
+        include_file?(file, include_prefixes) and not exclude_file?(file, exclude_prefixes)
+      end)
+    end
+  end
+
+  defp ranked_fetch_limit(limit, opts) do
+    include_prefixes = normalize_prefixes(Keyword.get(opts, :include_prefixes, []))
+    exclude_prefixes = normalize_prefixes(Keyword.get(opts, :exclude_prefixes, []))
+
+    case Keyword.get(opts, :overscan_limit) do
+      value when is_integer(value) and value > 0 ->
+        max(limit, value)
+
+      _ when include_prefixes != [] or exclude_prefixes != [] ->
+        max(limit * 50, 500)
+
+      _ ->
+        limit
+    end
+  end
+
+  defp normalize_prefixes(nil), do: []
+
+  defp normalize_prefixes(prefixes) when is_binary(prefixes) do
+    normalize_prefixes([prefixes])
+  end
+
+  defp normalize_prefixes(prefixes) when is_list(prefixes) do
+    prefixes
+    |> Enum.map(&to_string/1)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp include_file?(_file, []), do: true
+
+  defp include_file?(file, prefixes) do
+    Enum.any?(prefixes, &String.starts_with?(file, &1))
+  end
+
+  defp exclude_file?(file, prefixes) do
+    Enum.any?(prefixes, &String.starts_with?(file, &1))
   end
 
   defp blend_symbol_scores(ranked_symbols, opts) do

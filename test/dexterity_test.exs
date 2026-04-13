@@ -311,6 +311,52 @@ defmodule DexterityTest do
     def list_symbol_edges(_repo_root), do: {:ok, @symbol_edges}
   end
 
+  defmodule ScopedBackend do
+    @behaviour Dexterity.Backend
+
+    @nodes [
+      "lib/core.ex",
+      "lib/feature.ex",
+      "deps/dep_a/lib/dep_a.ex",
+      "deps/dep_b/lib/dep_b.ex"
+    ]
+
+    @impl true
+    def list_file_edges(_repo_root) do
+      {:ok,
+       [
+         {"lib/core.ex", "deps/dep_a/lib/dep_a.ex", 1.0},
+         {"lib/feature.ex", "deps/dep_a/lib/dep_a.ex", 1.0},
+         {"deps/dep_b/lib/dep_b.ex", "deps/dep_a/lib/dep_a.ex", 1.0},
+         {"deps/dep_a/lib/dep_a.ex", "deps/dep_b/lib/dep_b.ex", 0.7}
+       ]}
+    end
+
+    @impl true
+    def list_file_nodes(_repo_root), do: {:ok, @nodes}
+
+    @impl true
+    def list_exported_symbols(_repo_root, _file), do: {:ok, []}
+
+    @impl true
+    def find_definition(_repo_root, _module, _function, _arity), do: {:error, :not_found}
+
+    @impl true
+    def find_references(_repo_root, _module, _function, _arity), do: {:ok, []}
+
+    @impl true
+    def reindex_file(_file, _opts), do: :ok
+
+    @impl true
+    def cold_index(_repo_root, _opts), do: :ok
+
+    @impl true
+    def index_status(_repo_root), do: {:ok, :ready}
+
+    @impl true
+    def healthy?(_repo_root), do: {:ok, true}
+  end
+
   test "notify_file_changed delegates to injected backend and marks graph stale" do
     assert Dexterity.notify_file_changed("lib/a.ex", backend: StubBackend) == :ok
   end
@@ -508,6 +554,71 @@ defmodule DexterityTest do
 
     assert boosted_scores["lib/payments.ex"] > baseline_scores["lib/payments.ex"]
     assert hd(boosted) |> elem(0) == "lib/payments.ex"
+  end
+
+  test "get_ranked_files can overscan before filtering to first-party prefixes" do
+    repo_root = runtime_repo_root()
+    graph_server = Module.concat(__MODULE__, :"ScopedGraph#{System.unique_integer([:positive])}")
+
+    start_supervised!(
+      {GraphServer,
+       [
+         repo_root: repo_root,
+         backend: ScopedBackend,
+         store_conn: nil,
+         name: graph_server
+       ]}
+    )
+
+    Process.sleep(20)
+
+    assert {:ok, [{"deps/dep_a/lib/dep_a.ex", _score}]} =
+             Dexterity.get_ranked_files(
+               backend: ScopedBackend,
+               repo_root: repo_root,
+               graph_server: graph_server,
+               limit: 1
+             )
+
+    assert {:ok, [{"lib/" <> _path, _score}]} =
+             Dexterity.get_ranked_files(
+               backend: ScopedBackend,
+               repo_root: repo_root,
+               graph_server: graph_server,
+               include_prefixes: ["lib/"],
+               limit: 1
+             )
+  end
+
+  test "get_ranked_files can exclude deps and keep the requested result count" do
+    repo_root = runtime_repo_root()
+
+    graph_server =
+      Module.concat(__MODULE__, :"ScopedExcludeGraph#{System.unique_integer([:positive])}")
+
+    start_supervised!(
+      {GraphServer,
+       [
+         repo_root: repo_root,
+         backend: ScopedBackend,
+         store_conn: nil,
+         name: graph_server
+       ]}
+    )
+
+    Process.sleep(20)
+
+    assert {:ok, filtered} =
+             Dexterity.get_ranked_files(
+               backend: ScopedBackend,
+               repo_root: repo_root,
+               graph_server: graph_server,
+               exclude_prefixes: ["deps/"],
+               limit: 2
+             )
+
+    assert length(filtered) == 2
+    assert Enum.all?(filtered, fn {path, _score} -> String.starts_with?(path, "lib/") end)
   end
 
   test "get_repo_map shrinks auto budget for long conversations" do

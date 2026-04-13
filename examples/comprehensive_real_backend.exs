@@ -49,28 +49,34 @@ defmodule Examples.ComprehensiveRealBackend do
       IO.puts(run_cmd!(dexter_bin, ["lookup", "MyApp.Accounts", "register_user"], repo_root))
       IO.puts(run_cmd!(dexter_bin, ["references", "MyApp.Accounts", "register_user"], repo_root))
 
-      print_heading("Ranked Files")
+      print_heading("First-Party Ranked Files")
 
       ranked =
         Dexterity.get_ranked_files(
           active_file: "lib/my_app_web/live/dashboard_live.ex",
           mentioned_files: ["lib/my_app/accounts.ex"],
-          limit: 20
+          include_prefixes: ["lib/", "test/", "mix.exs"],
+          exclude_prefixes: ["deps/"],
+          overscan_limit: 200,
+          limit: 8
         )
 
-      IO.inspect(filter_project_files(ranked), pretty: true)
+      IO.inspect(ranked, pretty: true)
 
-      print_heading("Term-Aware Ranked Files")
+      print_heading("Term-Aware First-Party Ranked Files")
 
       ranked_with_terms =
         Dexterity.get_ranked_files(
           active_file: "lib/my_app_web/live/dashboard_live.ex",
           mentioned_files: ["lib/my_app/accounts.ex"],
           conversation_terms: ["refund"],
-          limit: 20
+          include_prefixes: ["lib/", "test/", "mix.exs"],
+          exclude_prefixes: ["deps/"],
+          overscan_limit: 200,
+          limit: 8
         )
 
-      IO.inspect(filter_project_files(ranked_with_terms), pretty: true)
+      IO.inspect(ranked_with_terms, pretty: true)
 
       print_heading("Ranked Symbols")
 
@@ -486,6 +492,30 @@ defmodule Examples.ComprehensiveRealBackend do
       repo_root
     ])
 
+    print_heading("Mix Task: dexterity.query ranked_files")
+
+    run_mix_task!("dexterity.query", QueryTask, [
+      "ranked_files",
+      "--repo-root",
+      repo_root,
+      "--active-file",
+      "lib/my_app_web/live/dashboard_live.ex",
+      "--mentioned-file",
+      "lib/my_app/accounts.ex",
+      "--include-prefix",
+      "lib/",
+      "--include-prefix",
+      "test/",
+      "--include-prefix",
+      "mix.exs",
+      "--exclude-prefix",
+      "deps/",
+      "--overscan-limit",
+      "200",
+      "--limit",
+      "8"
+    ])
+
     print_heading("Mix Task: dexterity.query file_graph")
 
     run_mix_task!("dexterity.query", QueryTask, [
@@ -590,160 +620,218 @@ defmodule Examples.ComprehensiveRealBackend do
 
     print_heading("MCP initialize")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 1,
-      "method" => "initialize",
-      "params" => %{"info" => "comprehensive_real_backend"}
-    }, context)
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "initialize",
+        "params" => %{"info" => "comprehensive_real_backend"}
+      },
+      context
+    )
 
     print_heading("MCP tools/list")
     mcp_request!(%{"jsonrpc" => "2.0", "id" => 2, "method" => "tools/list"}, context)
 
     print_heading("MCP tools/call status")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 3,
-      "method" => "tools/call",
-      "params" => %{"name" => "status", "arguments" => %{}}
-    }, context)
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 3,
+        "method" => "tools/call",
+        "params" => %{"name" => "status", "arguments" => %{}}
+      },
+      context
+    )
 
     print_heading("MCP tools/call get_repo_map")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 4,
-      "method" => "tools/call",
-      "params" => %{
-        "name" => "get_repo_map",
-        "arguments" => %{
-          "active_file" => "lib/my_app/accounts.ex",
-          "mentioned_files" => ["lib/my_app_web/live/dashboard_live.ex"],
-          "token_budget" => 2048,
-          "limit" => 5
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 4,
+        "method" => "tools/call",
+        "params" => %{
+          "name" => "get_repo_map",
+          "arguments" => %{
+            "active_file" => "lib/my_app/accounts.ex",
+            "mentioned_files" => ["lib/my_app_web/live/dashboard_live.ex"],
+            "token_budget" => 2048,
+            "limit" => 5
+          }
         }
-      }
-    }, context)
+      },
+      context
+    )
 
     print_heading("MCP tools/call get_file_graph_snapshot")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 41,
-      "method" => "tools/call",
-      "params" => %{
-        "name" => "get_file_graph_snapshot",
-        "arguments" => %{}
-      }
-    }, context)
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 41,
+        "method" => "tools/call",
+        "params" => %{
+          "name" => "get_file_graph_snapshot",
+          "arguments" => %{}
+        }
+      },
+      context
+    )
 
     print_heading("MCP tools/call find_symbols")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 5,
-      "method" => "tools/call",
-      "params" => %{
-        "name" => "find_symbols",
-        "arguments" => %{"query" => "refund"}
-      }
-    }, context)
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 5,
+        "method" => "tools/call",
+        "params" => %{
+          "name" => "find_symbols",
+          "arguments" => %{"query" => "refund"}
+        }
+      },
+      context
+    )
+
+    print_heading("MCP tools/call get_ranked_files")
+
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 50,
+        "method" => "tools/call",
+        "params" => %{
+          "name" => "get_ranked_files",
+          "arguments" => %{
+            "active_file" => "lib/my_app_web/live/dashboard_live.ex",
+            "mentioned_files" => ["lib/my_app/accounts.ex"],
+            "include_prefixes" => ["lib/", "test/", "mix.exs"],
+            "exclude_prefixes" => ["deps/"],
+            "overscan_limit" => 200,
+            "limit" => 8
+          }
+        }
+      },
+      context
+    )
 
     print_heading("MCP tools/call get_ranked_symbols")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 51,
-      "method" => "tools/call",
-      "params" => %{
-        "name" => "get_ranked_symbols",
-        "arguments" => %{
-          "active_file" => "lib/my_app_web/live/dashboard_live.ex",
-          "mentioned_files" => ["lib/my_app/accounts.ex"],
-          "limit" => 6
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 51,
+        "method" => "tools/call",
+        "params" => %{
+          "name" => "get_ranked_symbols",
+          "arguments" => %{
+            "active_file" => "lib/my_app_web/live/dashboard_live.ex",
+            "mentioned_files" => ["lib/my_app/accounts.ex"],
+            "limit" => 6
+          }
         }
-      }
-    }, context)
+      },
+      context
+    )
 
     print_heading("MCP tools/call get_symbol_graph_snapshot")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 53,
-      "method" => "tools/call",
-      "params" => %{
-        "name" => "get_symbol_graph_snapshot",
-        "arguments" => %{}
-      }
-    }, context)
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 53,
+        "method" => "tools/call",
+        "params" => %{
+          "name" => "get_symbol_graph_snapshot",
+          "arguments" => %{}
+        }
+      },
+      context
+    )
 
     print_heading("MCP tools/call get_impact_context")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 52,
-      "method" => "tools/call",
-      "params" => %{
-        "name" => "get_impact_context",
-        "arguments" => %{
-          "changed_files" => ["lib/my_app/accounts.ex", "lib/my_app_web/live/dashboard_live.ex"],
-          "token_budget" => 1500,
-          "limit" => 6
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 52,
+        "method" => "tools/call",
+        "params" => %{
+          "name" => "get_impact_context",
+          "arguments" => %{
+            "changed_files" => ["lib/my_app/accounts.ex", "lib/my_app_web/live/dashboard_live.ex"],
+            "token_budget" => 1500,
+            "limit" => 6
+          }
         }
-      }
-    }, context)
+      },
+      context
+    )
 
     print_heading("MCP tools/call get_unused_exports")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 6,
-      "method" => "tools/call",
-      "params" => %{
-        "name" => "get_unused_exports",
-        "arguments" => %{}
-      }
-    }, context)
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 6,
+        "method" => "tools/call",
+        "params" => %{
+          "name" => "get_unused_exports",
+          "arguments" => %{}
+        }
+      },
+      context
+    )
 
     print_heading("MCP tools/call get_export_analysis")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 7,
-      "method" => "tools/call",
-      "params" => %{
-        "name" => "get_export_analysis",
-        "arguments" => %{"limit" => 20}
-      }
-    }, context)
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 7,
+        "method" => "tools/call",
+        "params" => %{
+          "name" => "get_export_analysis",
+          "arguments" => %{"limit" => 20}
+        }
+      },
+      context
+    )
 
     print_heading("MCP tools/call get_runtime_observations")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 8,
-      "method" => "tools/call",
-      "params" => %{
-        "name" => "get_runtime_observations",
-        "arguments" => %{}
-      }
-    }, context)
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 8,
+        "method" => "tools/call",
+        "params" => %{
+          "name" => "get_runtime_observations",
+          "arguments" => %{}
+        }
+      },
+      context
+    )
 
     print_heading("MCP tools/call get_structural_snapshot")
 
-    mcp_request!(%{
-      "jsonrpc" => "2.0",
-      "id" => 9,
-      "method" => "tools/call",
-      "params" => %{
-        "name" => "get_structural_snapshot",
-        "arguments" => %{
-          "include_export_analysis" => true,
-          "include_runtime_observations" => true
+    mcp_request!(
+      %{
+        "jsonrpc" => "2.0",
+        "id" => 9,
+        "method" => "tools/call",
+        "params" => %{
+          "name" => "get_structural_snapshot",
+          "arguments" => %{
+            "include_export_analysis" => true,
+            "include_runtime_observations" => true
+          }
         }
-      }
-    }, context)
+      },
+      context
+    )
   end
 
   defp mcp_request!(request, context) do
@@ -814,17 +902,6 @@ defmodule Examples.ComprehensiveRealBackend do
         #{output}
         """
     end
-  end
-
-  defp filter_project_files({:ok, ranked_files}) do
-    {:ok,
-     ranked_files
-     |> Enum.filter(fn {file, _score} ->
-       String.starts_with?(file, "lib/") or
-         String.starts_with?(file, "test/") or
-         file == "mix.exs"
-     end)
-     |> Enum.take(8)}
   end
 
   defp print_heading(label) do

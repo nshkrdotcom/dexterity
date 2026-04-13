@@ -94,6 +94,48 @@ defmodule Dexterity.MCPTest do
     end
   end
 
+  defmodule RankedFilesBackend do
+    @behaviour Dexterity.Backend
+
+    @impl true
+    def list_file_edges(_repo_root) do
+      {:ok,
+       [
+         {"lib/core.ex", "deps/dep_a/lib/dep_a.ex", 1.0},
+         {"lib/feature.ex", "deps/dep_a/lib/dep_a.ex", 1.0},
+         {"deps/dep_b/lib/dep_b.ex", "deps/dep_a/lib/dep_a.ex", 1.0},
+         {"deps/dep_a/lib/dep_a.ex", "deps/dep_b/lib/dep_b.ex", 0.7}
+       ]}
+    end
+
+    @impl true
+    def list_file_nodes(_repo_root) do
+      {:ok,
+       ["lib/core.ex", "lib/feature.ex", "deps/dep_a/lib/dep_a.ex", "deps/dep_b/lib/dep_b.ex"]}
+    end
+
+    @impl true
+    def list_exported_symbols(_repo_root, _file), do: {:ok, []}
+
+    @impl true
+    def find_definition(_repo_root, _module, _function, _arity), do: {:error, :not_found}
+
+    @impl true
+    def find_references(_repo_root, _module, _function, _arity), do: {:ok, []}
+
+    @impl true
+    def reindex_file(_file, _opts), do: :ok
+
+    @impl true
+    def cold_index(_repo_root, _opts), do: :ok
+
+    @impl true
+    def index_status(_repo_root), do: {:ok, :ready}
+
+    @impl true
+    def healthy?(_repo_root), do: {:ok, true}
+  end
+
   defp context do
     %{
       backend: StubBackend,
@@ -277,6 +319,52 @@ defmodule Dexterity.MCPTest do
              Dexterity.MCP.handle_request(test_only_request, context())
 
     assert Enum.any?(test_only_exports, &(&1["function"] == "test_only"))
+  end
+
+  test "tools/call get_ranked_files supports include and exclude prefixes" do
+    graph_server = Module.concat(__MODULE__, :"RankedGraph#{System.unique_integer([:positive])}")
+
+    start_supervised!(
+      {Dexterity.GraphServer,
+       [
+         repo_root: ".",
+         backend: RankedFilesBackend,
+         store_conn: nil,
+         name: graph_server
+       ]}
+    )
+
+    Process.sleep(20)
+
+    request = %{
+      "jsonrpc" => "2.0",
+      "id" => 63,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_ranked_files",
+        "arguments" => %{
+          "backend" => "Elixir.Dexterity.MCPTest.RankedFilesBackend",
+          "include_prefixes" => ["lib/"],
+          "exclude_prefixes" => ["deps/"],
+          "overscan_limit" => 10,
+          "limit" => 2
+        }
+      }
+    }
+
+    context = %{context() | backend: RankedFilesBackend, graph_server: graph_server}
+
+    assert {:ok, %{"result" => %{"result" => ranked_files}}} =
+             Dexterity.MCP.handle_request(request, context)
+
+    assert length(ranked_files) == 2
+
+    assert Enum.all?(ranked_files, fn
+             [path, score] -> String.starts_with?(path, "lib/") and is_float(score)
+             _other -> false
+           end)
+
+    assert {:ok, _json} = Jason.encode(%{"result" => ranked_files})
   end
 
   test "tools/call supports structural snapshot surfaces" do

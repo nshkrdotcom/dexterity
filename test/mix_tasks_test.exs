@@ -158,6 +158,47 @@ defmodule MixTasksTest do
     end
   end
 
+  defmodule RankedFilesTaskBackend do
+    @behaviour Dexterity.Backend
+
+    @impl true
+    def list_file_edges(_repo_root) do
+      {:ok,
+       [
+         {"lib/a.ex", "deps/dep_a/lib/dep_a.ex", 1.0},
+         {"lib/b.ex", "deps/dep_a/lib/dep_a.ex", 1.0},
+         {"deps/dep_b/lib/dep_b.ex", "deps/dep_a/lib/dep_a.ex", 1.0},
+         {"deps/dep_a/lib/dep_a.ex", "deps/dep_b/lib/dep_b.ex", 0.7}
+       ]}
+    end
+
+    @impl true
+    def list_file_nodes(_repo_root) do
+      {:ok, ["lib/a.ex", "lib/b.ex", "deps/dep_a/lib/dep_a.ex", "deps/dep_b/lib/dep_b.ex"]}
+    end
+
+    @impl true
+    def list_exported_symbols(_repo_root, _file), do: {:ok, []}
+
+    @impl true
+    def find_definition(_repo_root, _module, _function, _arity), do: {:error, :not_found}
+
+    @impl true
+    def find_references(_repo_root, _module, _function, _arity), do: {:ok, []}
+
+    @impl true
+    def reindex_file(_file, _opts), do: :ok
+
+    @impl true
+    def cold_index(_repo_root, _opts), do: :ok
+
+    @impl true
+    def index_status(_repo_root), do: {:ok, :ready}
+
+    @impl true
+    def healthy?(_repo_root), do: {:ok, true}
+  end
+
   setup do
     stop_app_if_running()
 
@@ -538,6 +579,28 @@ defmodule MixTasksTest do
 
     assert test_only =~ "test_support"
     stop_app_if_running()
+  end
+
+  test "dexterity.query ranked_files filters to first-party prefixes", %{repo_root: repo_root} do
+    output =
+      capture_io(fn ->
+        Query.run([
+          "ranked_files",
+          "--backend",
+          inspect(RankedFilesTaskBackend),
+          "--repo-root",
+          repo_root,
+          "--include-prefix",
+          "lib/",
+          "--limit",
+          "2"
+        ])
+      end)
+
+    assert output =~ "ranked_files:"
+    assert output =~ "lib/a.ex"
+    assert output =~ "lib/b.ex"
+    refute output =~ "deps/dep_a/lib/dep_a.ex"
   end
 
   defp stop_app_if_running do

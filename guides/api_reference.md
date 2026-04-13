@@ -34,6 +34,12 @@ Authoritative public API behavior for Dexterity.
 - `:files`
 
 `context_opts` may also include:
+- `:active_file`
+- `:mentioned_files`
+- `:edited_files`
+- `:include_prefixes`
+- `:exclude_prefixes`
+- `:overscan_limit`
 - `:conversation_terms`
 - `:conversation_tokens`
 - `:changed_files`

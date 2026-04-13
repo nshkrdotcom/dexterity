@@ -42,7 +42,16 @@ That example uses a real `dexter` binary, a real temporary `.dexter.db`, real gi
     limit: 20
   )
 
-{:ok, ranked} = Dexterity.get_ranked_files(limit: 20, repo_root: ".", backend: Dexterity.Backend.Dexter)
+{:ok, ranked} =
+  Dexterity.get_ranked_files(
+    limit: 20,
+    repo_root: ".",
+    backend: Dexterity.Backend.Dexter,
+    active_file: "lib/my_app.ex",
+    include_prefixes: ["lib/", "test/", "mix.exs"],
+    exclude_prefixes: ["deps/"],
+    overscan_limit: 200
+  )
 {:ok, ranked_symbols} = Dexterity.get_ranked_symbols(limit: 20, active_file: "lib/my_app.ex", repo_root: ".", backend: Dexterity.Backend.Dexter)
 {:ok, impact_context} = Dexterity.get_impact_context(changed_files: ["lib/my_app.ex"], token_budget: 2048, repo_root: ".", backend: Dexterity.Backend.Dexter)
 {:ok, symbols} = Dexterity.find_symbols("refund", repo_root: ".", backend: Dexterity.Backend.Dexter)
@@ -60,10 +69,17 @@ mix dexterity.status --repo-root .
 mix dexterity.map --active-file lib/my_app.ex --limit 20 --token-budget 2048
 mix dexterity.query references MyApp.Accounts register 2
 mix dexterity.query symbols refund
+mix dexterity.query ranked_files --active-file lib/my_app.ex --include-prefix lib/ --include-prefix test/ --include-prefix mix.exs --exclude-prefix deps/ --overscan-limit 200 --limit 10
 mix dexterity.query ranked_symbols --active-file lib/my_app.ex
 mix dexterity.query impact_context --changed-file lib/my_app.ex --token-budget 2048
 mix dexterity.query export_analysis
 mix dexterity.query unused_exports
+```
+
+If you want a deterministic surface demo before wiring Dexterity to a real `dexter` index, run:
+
+```bash
+mix run examples/ranked_files_surface.exs
 ```
 
 ## Error handling posture

@@ -35,6 +35,16 @@ Dexterity exposes a JSON-RPC/stdio MCP server through `mix dexterity.mcp.serve`.
 - `get_module_deps`
 - `status`
 
+## Ranked file arguments
+
+`get_ranked_files` accepts the same first-party filtering controls as the Elixir API and mix task:
+
+- `include_prefixes` or `includePrefixes`
+- `exclude_prefixes` or `excludePrefixes`
+- `overscan_limit` or `overscanLimit`
+
+Use these when Dexter has indexed `deps/` but the caller only wants first-party files such as `lib/`, `test/`, or `mix.exs`.
+
 ## Validation
 
 - All parse failures return `error` with `code: -32700` (parse error) or `-32602` (invalid params).
