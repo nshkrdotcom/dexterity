@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Dexterity.Index do
   Triggers a Dexter index refresh for the target repo root.
 
   Usage:
-      mix dexterity.index [--repo-root PATH] [--backend MODULE]
+      mix dexterity.index [--repo-root PATH] [--backend MODULE] [--dexter-bin PATH]
   """
 
   use Mix.Task
@@ -16,7 +16,7 @@ defmodule Mix.Tasks.Dexterity.Index do
   def run(argv) do
     parsed =
       OptionParser.parse!(argv,
-        strict: [repo_root: :string, backend: :string],
+        strict: [repo_root: :string, backend: :string, dexter_bin: :string],
         aliases: [r: :repo_root, b: :backend]
       )
 
@@ -29,15 +29,18 @@ defmodule Mix.Tasks.Dexterity.Index do
 
     repo_root = Helpers.parse_repo_root(opts)
     backend = Helpers.parse_backend(opts)
+    dexter_bin = Helpers.parse_dexter_bin(opts)
 
     previous = [
       repo_root: Application.get_env(:dexterity, :repo_root),
-      backend: Application.get_env(:dexterity, :backend)
+      backend: Application.get_env(:dexterity, :backend),
+      dexter_bin: Application.get_env(:dexterity, :dexter_bin)
     ]
 
     try do
       Application.put_env(:dexterity, :repo_root, repo_root)
       Application.put_env(:dexterity, :backend, backend)
+      Application.put_env(:dexterity, :dexter_bin, dexter_bin)
 
       case refresh_index(backend, repo_root) do
         :ok ->

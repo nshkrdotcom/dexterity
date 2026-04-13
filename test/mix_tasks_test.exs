@@ -223,6 +223,22 @@ defmodule MixTasksTest do
     assert output =~ "index refreshed"
   end
 
+  test "dexterity.index accepts a dexter_bin override", %{repo_root: repo_root} do
+    output =
+      capture_io(fn ->
+        Index.run([
+          "--repo-root",
+          repo_root,
+          "--backend",
+          inspect(TaskBackend),
+          "--dexter-bin",
+          "/tmp/custom-dexter"
+        ])
+      end)
+
+    assert output =~ "index refreshed"
+  end
+
   test "task helpers load backend modules before validating callbacks" do
     unload_module!(Dexterity.Backend.Dexter)
     assert :code.is_loaded(Dexterity.Backend.Dexter) == false
@@ -601,6 +617,38 @@ defmodule MixTasksTest do
     assert output =~ "lib/a.ex"
     assert output =~ "lib/b.ex"
     refute output =~ "deps/dep_a/lib/dep_a.ex"
+  end
+
+  test "dexterity.query ranked_files supports json output and dexter_bin override", %{
+    repo_root: repo_root
+  } do
+    output =
+      capture_io(fn ->
+        Query.run([
+          "ranked_files",
+          "--backend",
+          inspect(RankedFilesTaskBackend),
+          "--repo-root",
+          repo_root,
+          "--include-prefix",
+          "lib/",
+          "--limit",
+          "2",
+          "--dexter-bin",
+          "/tmp/custom-dexter",
+          "--json"
+        ])
+      end)
+
+    payload = Jason.decode!(String.trim(output))
+
+    assert payload["ok"] == true
+    assert payload["command"] == "ranked_files"
+
+    assert payload["result"] == [
+             ["lib/a.ex", 0.037500000000000006],
+             ["lib/b.ex", 0.037500000000000006]
+           ]
   end
 
   defp stop_app_if_running do

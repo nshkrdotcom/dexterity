@@ -6,6 +6,7 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
 
   @task_repo_root_key :repo_root
   @task_backend_key :backend
+  @task_dexter_bin_key :dexter_bin
 
   @spec parse_backend(keyword()) :: module()
   def parse_backend(opts) do
@@ -16,6 +17,11 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
   @spec parse_repo_root(keyword()) :: String.t()
   def parse_repo_root(opts) do
     Keyword.get(opts, @task_repo_root_key, Config.repo_root())
+  end
+
+  @spec parse_dexter_bin(keyword()) :: String.t()
+  def parse_dexter_bin(opts) do
+    Keyword.get(opts, @task_dexter_bin_key, Config.fetch(:dexter_bin))
   end
 
   @spec ensure_started!() :: :ok

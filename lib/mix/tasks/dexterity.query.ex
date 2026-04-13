@@ -12,7 +12,7 @@ defmodule Mix.Tasks.Dexterity.Query do
       mix dexterity.query files <sql_like_pattern> [--limit N]
       mix dexterity.query ranked_files [--active-file path] [--mentioned-file path] [--edited-file path]
                                      [--include-prefix path] [--exclude-prefix path]
-                                     [--overscan-limit N] [--limit N]
+                                     [--overscan-limit N] [--limit N] [--json]
       mix dexterity.query file_graph
       mix dexterity.query symbol_graph
       mix dexterity.query structural_snapshot [--include-export-analysis] [--include-runtime-observations]
@@ -41,8 +41,10 @@ defmodule Mix.Tasks.Dexterity.Query do
         strict: [
           repo_root: :string,
           backend: :string,
+          dexter_bin: :string,
           depth: :integer,
           limit: :integer,
+          json: :boolean,
           token_budget: :string,
           active_file: :string,
           mentioned_file: :keep,
@@ -70,18 +72,24 @@ defmodule Mix.Tasks.Dexterity.Query do
 
     previous = [
       repo_root: Application.get_env(:dexterity, :repo_root),
-      backend: Application.get_env(:dexterity, :backend)
+      backend: Application.get_env(:dexterity, :backend),
+      dexter_bin: Application.get_env(:dexterity, :dexter_bin)
     ]
 
     repo_root = Helpers.parse_repo_root(opts)
     backend = Helpers.parse_backend(opts)
+    dexter_bin = Helpers.parse_dexter_bin(opts)
 
     try do
       Application.put_env(:dexterity, :repo_root, repo_root)
       Application.put_env(:dexterity, :backend, backend)
+      Application.put_env(:dexterity, :dexter_bin, dexter_bin)
+      Process.put({__MODULE__, :result_opts}, opts)
       Helpers.ensure_started!()
       dispatch_command(command, params, opts)
     after
+      Process.delete({__MODULE__, :result_opts})
+
       Enum.each(previous, fn {key, value} ->
         if is_nil(value) do
           Application.delete_env(:dexterity, key)
@@ -484,6 +492,36 @@ defmodule Mix.Tasks.Dexterity.Query do
   end
 
   defp render_query_result(kind, result) do
-    Mix.shell().info("#{kind}: #{inspect(result, pretty: true, width: 80)}")
+    if Keyword.get(result_opts(), :json, false) do
+      Mix.shell().info(
+        Jason.encode!(%{
+          ok: true,
+          command: to_string(kind),
+          result: normalize_json(result)
+        })
+      )
+    else
+      Mix.shell().info("#{kind}: #{inspect(result, pretty: true, width: 80)}")
+    end
   end
+
+  defp result_opts do
+    Process.get({__MODULE__, :result_opts}, [])
+  end
+
+  defp normalize_json(map) when is_map(map) do
+    Map.new(map, fn {key, value} -> {to_string(key), normalize_json(value)} end)
+  end
+
+  defp normalize_json(list) when is_list(list) do
+    Enum.map(list, &normalize_json/1)
+  end
+
+  defp normalize_json(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> normalize_json()
+  end
+
+  defp normalize_json(other), do: other
 end
