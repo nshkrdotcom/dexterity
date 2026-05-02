@@ -501,7 +501,7 @@ defmodule Mix.Tasks.Dexterity.Query do
         })
       )
     else
-      Mix.shell().info("#{kind}: #{inspect(result, pretty: true, width: 80)}")
+      Mix.shell().info("#{kind}: #{inspect(result, pretty: true, width: 80, limit: :infinity)}")
     end
   end
 

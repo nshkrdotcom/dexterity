@@ -135,7 +135,7 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
 
   @spec print_value(term()) :: :ok
   def print_value(value) do
-    Mix.shell().info(inspect(value, pretty: true, width: 80))
+    Mix.shell().info(inspect(value, pretty: true, width: 80, limit: :infinity))
     :ok
   end
 
