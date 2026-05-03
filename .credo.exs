@@ -31,7 +31,7 @@
           "apps/*/test/",
           "apps/*/web/"
         ],
-        excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/"]
+        excluded: ["/_build/", "/deps/", "/node_modules/"]
       },
       #
       # Load and configure plugins here:
@@ -158,7 +158,6 @@
           {Credo.Check.Warning.UnusedListOperation, []},
           {Credo.Check.Warning.UnusedMapOperation, []},
           {Credo.Check.Warning.UnusedPathOperation, []},
-          {Credo.Check.Warning.UnusedRegexOperation, []},
           {Credo.Check.Warning.UnusedStringOperation, []},
           {Credo.Check.Warning.UnusedTupleOperation, []},
           {Credo.Check.Warning.WrongTestFilename, []}

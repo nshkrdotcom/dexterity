@@ -49,12 +49,12 @@ defmodule Dexterity.Intelligence do
     repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
     limit = Keyword.get(opts, :limit, 20)
     baseline = AnalysisSupport.baseline_rank(Keyword.get(opts, :graph_server, GraphServer))
-    matcher = like_to_regex(pattern)
+    like_tokens = like_tokens(pattern)
 
     with {:ok, files} <- backend.list_file_nodes(repo_root) do
       files
       |> Enum.filter(
-        &(AnalysisSupport.project_file?(repo_root, &1) and Regex.match?(matcher, &1))
+        &(AnalysisSupport.project_file?(repo_root, &1) and like_match?(like_tokens, &1))
       )
       |> Enum.uniq()
       |> Enum.sort_by(fn file -> {-Map.get(baseline, file, 0.0), file} end)
@@ -138,28 +138,50 @@ defmodule Dexterity.Intelligence do
     |> to_string()
   end
 
-  defp like_to_regex(pattern) do
-    {body, escaped?} =
-      pattern
-      |> String.graphemes()
-      |> Enum.reduce({"", false}, fn
-        char, {acc, true} ->
-          {acc <> Regex.escape(char), false}
-
-        "\\", {acc, false} ->
-          {acc, true}
-
-        "%", {acc, false} ->
-          {acc <> ".*", false}
-
-        "_", {acc, false} ->
-          {acc <> ".", false}
-
-        char, {acc, false} ->
-          {acc <> Regex.escape(char), false}
-      end)
-
-    suffix = if escaped?, do: Regex.escape("\\"), else: ""
-    Regex.compile!("^" <> body <> suffix <> "$", "i")
+  defp like_tokens(pattern) do
+    pattern
+    |> String.downcase()
+    |> String.graphemes()
+    |> build_like_tokens([], false)
+    |> Enum.reverse()
   end
+
+  defp build_like_tokens([], acc, false), do: acc
+  defp build_like_tokens([], acc, true), do: [{:literal, "\\"} | acc]
+
+  defp build_like_tokens([char | rest], acc, true) do
+    build_like_tokens(rest, [{:literal, char} | acc], false)
+  end
+
+  defp build_like_tokens(["\\" | rest], acc, false), do: build_like_tokens(rest, acc, true)
+
+  defp build_like_tokens(["%" | rest], acc, false),
+    do: build_like_tokens(rest, [:many | acc], false)
+
+  defp build_like_tokens(["_" | rest], acc, false),
+    do: build_like_tokens(rest, [:one | acc], false)
+
+  defp build_like_tokens([char | rest], acc, false) do
+    build_like_tokens(rest, [{:literal, char} | acc], false)
+  end
+
+  defp like_match?(tokens, value) do
+    do_like_match?(tokens, value |> String.downcase() |> String.graphemes())
+  end
+
+  defp do_like_match?([], []), do: true
+  defp do_like_match?([], _chars), do: false
+  defp do_like_match?([:one | rest], [_char | chars]), do: do_like_match?(rest, chars)
+  defp do_like_match?([:one | _rest], []), do: false
+
+  defp do_like_match?([:many | rest] = tokens, chars) do
+    do_like_match?(rest, chars) or
+      case chars do
+        [_char | remaining] -> do_like_match?(tokens, remaining)
+        [] -> false
+      end
+  end
+
+  defp do_like_match?([{:literal, char} | rest], [char | chars]), do: do_like_match?(rest, chars)
+  defp do_like_match?([{:literal, _char} | _rest], _chars), do: false
 end

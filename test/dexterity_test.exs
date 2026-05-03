@@ -923,7 +923,10 @@ defmodule DexterityTest do
   end
 
   defp occurrences(string, pattern) do
-    Regex.scan(~r/#{Regex.escape(pattern)}/, string) |> length()
+    string
+    |> String.split(pattern)
+    |> length()
+    |> Kernel.-(1)
   end
 
   defp wait_for_summary_signature(conn, file, module_name, expected_signature, attempts \\ 20)

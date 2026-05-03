@@ -130,9 +130,9 @@ defmodule Dexterity.SymbolSource do
         |> Enum.map(&String.trim/1)
         |> Enum.reject(&(&1 == ""))
         |> Enum.join(" ")
-        |> String.replace(~r/\s+/, " ")
-        |> String.replace(~r/\s+do\s*$/, "")
-        |> String.replace(~r/\s*,\s*do:\s*.*$/, "")
+        |> collapse_whitespace()
+        |> trim_trailing_do()
+        |> trim_inline_do()
         |> case do
           "" -> "#{normalize_kind(symbol)} #{symbol.function}/#{symbol.arity}"
           inferred_signature -> inferred_signature
@@ -147,6 +147,29 @@ defmodule Dexterity.SymbolSource do
 
       signature_step(trimmed, acc, next)
     end)
+  end
+
+  defp collapse_whitespace(value) do
+    value
+    |> String.split()
+    |> Enum.join(" ")
+  end
+
+  defp trim_trailing_do(value) do
+    if String.ends_with?(value, " do") do
+      value
+      |> String.slice(0, String.length(value) - 3)
+      |> String.trim()
+    else
+      value
+    end
+  end
+
+  defp trim_inline_do(value) do
+    value
+    |> String.split(", do:", parts: 2)
+    |> hd()
+    |> String.trim()
   end
 
   defp signature_step("", [], _next), do: {:cont, []}

@@ -84,10 +84,23 @@ defmodule Dexterity.MixProject do
         LICENSE: [title: "License"]
       ],
       groups_for_extras: [
-        "Dexterity Guide": ~r/README.md/,
-        Examples: ~r/^examples\//,
-        "Developer Guides": ~r/^guides\//,
-        Maintenance: ~r/CHANGELOG.md|LICENSE/
+        "Dexterity Guide": ["README.md"],
+        Examples: ["examples/README.md"],
+        "Developer Guides": [
+          "guides/overview.md",
+          "guides/quickstart.md",
+          "guides/architecture.md",
+          "guides/kernel_surfaces.md",
+          "guides/api_reference.md",
+          "guides/configuration.md",
+          "guides/mcp.md",
+          "guides/mix_tasks.md",
+          "guides/testing_and_quality.md",
+          "guides/operations.md",
+          "guides/buildout_playbook.md",
+          "guides/roadmap.md"
+        ],
+        Maintenance: ["CHANGELOG.md", "LICENSE"]
       ],
       skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
     ]

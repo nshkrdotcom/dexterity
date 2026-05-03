@@ -220,8 +220,7 @@ defmodule Dexterity.SymbolGraphServer do
     terms
     |> Enum.flat_map(fn
       value when is_binary(value) ->
-        Regex.scan(~r/[A-Za-z0-9_!?]+/, String.downcase(value))
-        |> List.flatten()
+        Dexterity.Tokenizer.ascii_word_terms(value)
 
       _ ->
         []

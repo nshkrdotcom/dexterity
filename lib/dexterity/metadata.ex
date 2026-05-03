@@ -290,12 +290,7 @@ defmodule Dexterity.Metadata do
   end
 
   defp tokenize(string) do
-    string
-    |> then(&Regex.scan(~r/[A-Za-z_][A-Za-z0-9_!?]*/, &1))
-    |> List.flatten()
-    |> Enum.map(&String.downcase/1)
-    |> Enum.uniq()
-    |> Enum.sort()
+    Dexterity.Tokenizer.identifier_terms(string)
   end
 
   defp alias_to_string({:__aliases__, _, parts}), do: Enum.join(parts, ".")

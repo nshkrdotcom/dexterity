@@ -875,7 +875,7 @@ defmodule Examples.ComprehensiveRealBackend do
 
     Code.prepend_path(beam_dir)
 
-    runtime_probe_module = String.to_atom("Elixir.MyApp.RuntimeProbe")
+    runtime_probe_module = MyApp.RuntimeProbe
     {:module, ^runtime_probe_module} = Code.ensure_loaded(runtime_probe_module)
 
     case cover_apply(:start, []) do

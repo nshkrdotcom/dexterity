@@ -130,15 +130,16 @@ defmodule Dexterity.Entrypoints do
   defp existing_module(module_name) do
     [module_name, "Elixir." <> module_name]
     |> Enum.find_value({:error, :not_loaded}, fn candidate ->
-      try do
-        module = String.to_existing_atom(candidate)
-
-        if Code.ensure_loaded?(module) do
-          {:ok, module}
-        end
-      rescue
-        ArgumentError -> nil
+      case loaded_module(candidate) do
+        nil -> nil
+        module -> {:ok, module}
       end
+    end)
+  end
+
+  defp loaded_module(module_name) do
+    Enum.find_value(:code.all_loaded(), fn {module, _path} ->
+      if Atom.to_string(module) == module_name, do: module
     end)
   end
 end
