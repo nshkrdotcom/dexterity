@@ -3,10 +3,32 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
 
   alias Dexterity.ApplicationControl
   alias Dexterity.Config
+  alias Dexterity.GovernedAuthority
 
   @task_repo_root_key :repo_root
   @task_backend_key :backend
   @task_dexter_bin_key :dexter_bin
+  @governed_cli_strict [
+    governed_authority_ref: :string,
+    governed_tool_ref: :string,
+    governed_operation_ref: :string,
+    governed_repo_ref: :string,
+    governed_backend_ref: :string,
+    governed_command_ref: :string,
+    governed_credential_ref: :string,
+    governed_repo_root: :string,
+    governed_dexter_bin: :string,
+    governed_dexter_db: :string,
+    governed_store_path: :string,
+    governed_mcp_enabled: :string,
+    governed_credential_value: :string
+  ]
+
+  @spec governed_cli_strict_options() :: keyword()
+  def governed_cli_strict_options, do: @governed_cli_strict
+
+  @spec materialize_cli_opts!(keyword()) :: keyword()
+  def materialize_cli_opts!(opts), do: GovernedAuthority.materialize_cli_opts!(opts)
 
   @spec parse_backend(keyword()) :: module()
   def parse_backend(opts) do

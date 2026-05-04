@@ -38,27 +38,28 @@ defmodule Mix.Tasks.Dexterity.Query do
     parsed =
       OptionParser.parse!(
         argv,
-        strict: [
-          repo_root: :string,
-          backend: :string,
-          dexter_bin: :string,
-          depth: :integer,
-          limit: :integer,
-          json: :boolean,
-          token_budget: :string,
-          active_file: :string,
-          mentioned_file: :keep,
-          edited_file: :keep,
-          include_prefix: :keep,
-          exclude_prefix: :keep,
-          overscan_limit: :integer,
-          changed_file: :keep,
-          include_export_analysis: :boolean,
-          include_runtime_observations: :boolean
-        ]
+        strict:
+          [
+            repo_root: :string,
+            backend: :string,
+            dexter_bin: :string,
+            depth: :integer,
+            limit: :integer,
+            json: :boolean,
+            token_budget: :string,
+            active_file: :string,
+            mentioned_file: :keep,
+            edited_file: :keep,
+            include_prefix: :keep,
+            exclude_prefix: :keep,
+            overscan_limit: :integer,
+            changed_file: :keep,
+            include_export_analysis: :boolean,
+            include_runtime_observations: :boolean
+          ] ++ Helpers.governed_cli_strict_options()
       )
 
-    opts = elem(parsed, 0)
+    opts = parsed |> elem(0) |> Helpers.materialize_cli_opts!()
     args = elem(parsed, 1)
 
     if args == [] do

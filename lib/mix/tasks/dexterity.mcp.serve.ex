@@ -14,15 +14,19 @@ defmodule Mix.Tasks.Dexterity.Mcp.Serve do
   @shortdoc "Starts MCP server over stdio"
 
   @impl Mix.Task
-  @spec run([String.t()]) :: no_return() | :ok
+  @spec run([String.t()]) :: no_return()
   def run(argv) do
     parsed =
       OptionParser.parse!(argv,
-        strict: [repo_root: :string, backend: :string],
+        strict:
+          [
+            repo_root: :string,
+            backend: :string
+          ] ++ Helpers.governed_cli_strict_options(),
         aliases: [r: :repo_root, b: :backend]
       )
 
-    opts = elem(parsed, 0)
+    opts = parsed |> elem(0) |> Helpers.materialize_cli_opts!()
     args = elem(parsed, 1)
 
     if args != [] do
@@ -42,13 +46,18 @@ defmodule Mix.Tasks.Dexterity.Mcp.Serve do
       Application.put_env(:dexterity, :backend, backend)
       Helpers.ensure_started!()
 
-      if !Config.fetch(:mcp_enabled) do
+      if !Keyword.get(opts, :mcp_enabled, Config.fetch(:mcp_enabled)) do
         Mix.shell().info(
           "warning: mcp_enabled is false; proceeding because server is explicitly launched"
         )
       end
 
-      Dexterity.MCP.serve(repo_root: repo_root, backend: backend)
+      serve_opts =
+        opts
+        |> Keyword.put(:repo_root, repo_root)
+        |> Keyword.put(:backend, backend)
+
+      Dexterity.MCP.serve(serve_opts)
     after
       Enum.each(previous, fn {key, value} ->
         if is_nil(value) do

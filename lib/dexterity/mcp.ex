@@ -2,7 +2,7 @@ defmodule Dexterity.MCP do
   @moduledoc """
   Deterministic JSON-RPC/MCP transport over stdio.
   """
-  alias Dexterity.{Config, GraphServer, Query, SymbolGraphServer}
+  alias Dexterity.{Config, GovernedAuthority, GraphServer, Query, SymbolGraphServer}
 
   @jsonrpc "2.0"
   @parse_error -32_700
@@ -36,20 +36,24 @@ defmodule Dexterity.MCP do
   ]
 
   @type runtime_context :: %{
-          backend: module(),
-          repo_root: String.t(),
-          graph_server: module(),
-          symbol_graph_server: module()
+          required(:backend) => module(),
+          required(:repo_root) => String.t(),
+          required(:graph_server) => module(),
+          required(:symbol_graph_server) => module(),
+          optional(:governed?) => boolean(),
+          optional(:redaction_values) => [String.t()]
         }
 
-  @spec serve(keyword()) :: :ok
+  @spec serve(keyword()) :: no_return()
   def serve(opts \\ []) do
-    context = %{
-      backend: Keyword.get(opts, :backend, Config.fetch(:backend)),
-      repo_root: Keyword.get(opts, :repo_root, Config.repo_root()),
-      graph_server: Keyword.get(opts, :graph_server, GraphServer),
-      symbol_graph_server: Keyword.get(opts, :symbol_graph_server, SymbolGraphServer)
-    }
+    context =
+      case runtime_context(opts) do
+        {:ok, resolved_context} ->
+          resolved_context
+
+        {:error, reason} ->
+          raise ArgumentError, "invalid MCP runtime context: #{inspect(reason)}"
+      end
 
     :stdio
     |> IO.stream(:line)
@@ -59,6 +63,25 @@ defmodule Dexterity.MCP do
       |> process_line(context)
     end)
     |> Stream.run()
+  end
+
+  @spec runtime_context(keyword()) :: {:ok, runtime_context()} | {:error, term()}
+  def runtime_context(opts \\ []) do
+    governed? =
+      Keyword.has_key?(opts, :governed_authority) or
+        Keyword.has_key?(opts, :governed_authority_ref)
+
+    with {:ok, materialized} <- GovernedAuthority.materialize_opts(opts) do
+      {:ok,
+       %{
+         backend: Keyword.get(materialized, :backend, Config.fetch(:backend)),
+         repo_root: Keyword.get(materialized, :repo_root, Config.repo_root()),
+         graph_server: Keyword.get(materialized, :graph_server, GraphServer),
+         symbol_graph_server: Keyword.get(materialized, :symbol_graph_server, SymbolGraphServer),
+         governed?: governed?,
+         redaction_values: GovernedAuthority.redaction_values(materialized)
+       }}
+    end
   end
 
   @spec handle_request(map(), runtime_context()) ::
@@ -394,6 +417,8 @@ defmodule Dexterity.MCP do
   defp normalize_result(other), do: other
 
   defp tool_opts(params, context) do
+    ensure_mcp_config_allowed!(params, context)
+
     repo_root = get_optional(params, "repo_root") || context.repo_root
     backend = safe_module(get_optional(params, "backend"), context.backend)
 
@@ -410,6 +435,8 @@ defmodule Dexterity.MCP do
   end
 
   defp map_query_opts(params, context) do
+    ensure_mcp_config_allowed!(params, context)
+
     active_file = get_optional_either(params, "active_file", "activeFile")
     mentioned_files = parse_file_list_opt(params, "mentioned_files", "mentionedFiles")
     edited_files = parse_file_list_opt(params, "edited_files", "editedFiles")
@@ -465,9 +492,23 @@ defmodule Dexterity.MCP do
   end
 
   defp query_opts(params, context) do
+    ensure_mcp_config_allowed!(params, context)
+
     repo_root = get_optional(params, "repo_root") || context.repo_root
     backend = safe_module(get_optional(params, "backend"), context.backend)
     [repo_root: repo_root, backend: backend, graph_server: context.graph_server]
+  end
+
+  defp ensure_mcp_config_allowed!(params, context) do
+    if Map.get(context, :governed?, false) and direct_mcp_config?(params) do
+      raise ArgumentError, "direct MCP config cannot accompany governed authority"
+    end
+
+    :ok
+  end
+
+  defp direct_mcp_config?(params) do
+    get_optional(params, "repo_root") != nil or get_optional(params, "backend") != nil
   end
 
   defp parse_file_list(nil), do: []

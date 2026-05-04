@@ -57,6 +57,9 @@ Use these when Dexter has indexed `deps/` but the caller only wants first-party 
 - When no matching running file-graph process exists for the requested backend/repo pair, file-graph snapshot and file-rank calls can build a temporary file graph for that request.
 - When no matching running symbol-graph process exists for the requested backend/repo pair, symbol ranking calls can build a temporary symbol graph for that request.
 - MCP is guarded by config and should be disabled in untrusted contexts.
+- Governed MCP startup uses the same authority packet as the API and task
+  flags. Once governed, per-request `repo_root` or `backend` values are
+  rejected so tool calls cannot override authority-selected routing.
 
 ## Operational posture
 

@@ -274,13 +274,13 @@ defmodule Dexterity.Backend.Dexter do
     repo_root = Keyword.get(opts, :repo_root, Config.repo_root()) |> Path.expand()
     args = ["reindex", file]
 
-    run_command(args, repo_root)
+    run_command(args, repo_root, opts)
   end
 
   @impl Dexterity.Backend
   def cold_index(repo_root, opts \\ []) do
     cwd = Keyword.get(opts, :repo_root, repo_root) |> Path.expand()
-    run_command(["init", "."], cwd)
+    run_command(["init", "."], cwd, opts)
   end
 
   @impl Dexterity.Backend
@@ -330,8 +330,10 @@ defmodule Dexterity.Backend.Dexter do
     end
   end
 
-  defp run_command(args, repo_root) do
-    case System.cmd(Config.fetch(:dexter_bin), args, cd: repo_root, stderr_to_stdout: true) do
+  defp run_command(args, repo_root, opts) do
+    dexter_bin = Keyword.get(opts, :dexter_bin, Config.fetch(:dexter_bin))
+
+    case System.cmd(dexter_bin, args, cd: repo_root, stderr_to_stdout: true) do
       {_, 0} ->
         :ok
 

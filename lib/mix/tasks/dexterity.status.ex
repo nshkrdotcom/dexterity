@@ -17,11 +17,15 @@ defmodule Mix.Tasks.Dexterity.Status do
   def run(argv) do
     parsed =
       OptionParser.parse!(argv,
-        strict: [repo_root: :string, backend: :string],
+        strict:
+          [
+            repo_root: :string,
+            backend: :string
+          ] ++ Helpers.governed_cli_strict_options(),
         aliases: [r: :repo_root, b: :backend]
       )
 
-    opts = elem(parsed, 0)
+    opts = parsed |> elem(0) |> Helpers.materialize_cli_opts!()
     args = elem(parsed, 1)
 
     if args != [] do
@@ -41,7 +45,12 @@ defmodule Mix.Tasks.Dexterity.Status do
       Application.put_env(:dexterity, :backend, backend)
       Helpers.ensure_started!()
 
-      case Dexterity.status() do
+      status_opts =
+        opts
+        |> Keyword.put(:repo_root, repo_root)
+        |> Keyword.put(:backend, backend)
+
+      case Dexterity.status(status_opts) do
         {:ok, snapshot} ->
           print_status(snapshot)
 

@@ -16,11 +16,16 @@ defmodule Mix.Tasks.Dexterity.Index do
   def run(argv) do
     parsed =
       OptionParser.parse!(argv,
-        strict: [repo_root: :string, backend: :string, dexter_bin: :string],
+        strict:
+          [
+            repo_root: :string,
+            backend: :string,
+            dexter_bin: :string
+          ] ++ Helpers.governed_cli_strict_options(),
         aliases: [r: :repo_root, b: :backend]
       )
 
-    opts = elem(parsed, 0)
+    opts = parsed |> elem(0) |> Helpers.materialize_cli_opts!()
     args = elem(parsed, 1)
 
     if args != [] do
@@ -42,7 +47,7 @@ defmodule Mix.Tasks.Dexterity.Index do
       Application.put_env(:dexterity, :backend, backend)
       Application.put_env(:dexterity, :dexter_bin, dexter_bin)
 
-      case refresh_index(backend, repo_root) do
+      case refresh_index(backend, repo_root, dexter_bin) do
         :ok ->
           Mix.shell().info("index refreshed for #{repo_root}")
 
@@ -60,13 +65,13 @@ defmodule Mix.Tasks.Dexterity.Index do
     end
   end
 
-  defp refresh_index(backend, repo_root) do
+  defp refresh_index(backend, repo_root, dexter_bin) do
     case backend.index_status(repo_root) do
       {:ok, :missing} ->
-        backend.cold_index(repo_root, [])
+        backend.cold_index(repo_root, repo_root: repo_root, dexter_bin: dexter_bin)
 
       {:ok, status} when status in [:ready, :stale] ->
-        backend.reindex_file(".", repo_root: repo_root)
+        backend.reindex_file(".", repo_root: repo_root, dexter_bin: dexter_bin)
 
       {:error, reason} ->
         {:error, reason}

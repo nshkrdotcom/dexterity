@@ -44,6 +44,21 @@ config :dexterity,
   mcp_enabled: true
 ```
 
+## Governed authority
+
+Standalone Dexterity APIs and Mix tasks continue to use application settings
+and explicit direct options. Governed runs are separate: callers pass
+`:governed_authority` to the Elixir API or the matching `--governed-*` task
+flags. The authority must include refs for the authority, tool, operation,
+repository, backend, command, and credential plus materialized repo and command
+values.
+
+Governed mode rejects direct `:repo_root`, `:backend`, `:dexter_bin`,
+`:dexter_db`, `:store_path`, `:mcp_enabled`, command env, and tool config
+beside the authority packet. This keeps application env, default command
+discovery, and singleton runtime config out of governed materialization while
+preserving existing standalone behavior.
+
 ## Configuration diagnostics
 
 - `mix dexterity.status` returns runtime index/backend/graph health snapshot from these settings.

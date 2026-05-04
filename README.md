@@ -116,6 +116,12 @@ config :dexterity,
   mcp_enabled: true
 ```
 
+These application settings are standalone runtime defaults. Governed runs must
+provide an explicit authority packet or the matching `--governed-*` task flags.
+When governed authority is present, direct `--repo-root`, `--backend`,
+`--dexter-bin`, command env, and tool config values are rejected instead of
+being treated as authority.
+
 Build or refresh the Dexter index for the repo:
 
 ```bash

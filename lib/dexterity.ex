@@ -8,6 +8,7 @@ defmodule Dexterity do
   alias Dexterity.ExportAnalysis
   alias Dexterity.FileGraphSnapshot
   alias Dexterity.GraphServer
+  alias Dexterity.GovernedAuthority
   alias Dexterity.Intelligence
   alias Dexterity.Metadata
   alias Dexterity.Render
@@ -114,6 +115,7 @@ defmodule Dexterity do
   """
   @spec get_repo_map(context_opts()) :: {:ok, String.t()} | {:error, term()}
   def get_repo_map(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
     backend = Keyword.get(opts, :backend, Config.fetch(:backend))
     repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
     budget = Keyword.get(opts, :token_budget, :auto)
@@ -157,6 +159,7 @@ defmodule Dexterity do
   """
   @spec get_ranked_files(context_opts()) :: {:ok, [{String.t(), float()}]} | {:error, term()}
   def get_ranked_files(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
     limit = Keyword.get(opts, :limit, 200)
     fetch_limit = ranked_fetch_limit(limit, opts)
 
@@ -187,6 +190,8 @@ defmodule Dexterity do
   """
   @spec get_ranked_symbols(context_opts()) :: {:ok, [map()]} | {:error, term()}
   def get_ranked_symbols(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     with_file_graph_server(opts, fn resolved_graph_server ->
       resolved_opts = Keyword.put(opts, :graph_server, resolved_graph_server)
 
@@ -224,6 +229,8 @@ defmodule Dexterity do
   """
   @spec get_impact_context(context_opts()) :: {:ok, String.t()} | {:error, term()}
   def get_impact_context(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     with_symbol_graph_server(opts, fn symbol_graph_server ->
       budget = Keyword.get(opts, :token_budget, 2_048)
       limit = Keyword.get(opts, :limit, 24)
@@ -261,6 +268,8 @@ defmodule Dexterity do
   """
   @spec get_file_graph_snapshot(keyword()) :: {:ok, FileGraphSnapshot.t()} | {:error, term()}
   def get_file_graph_snapshot(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     snapshot_opts =
       opts
       |> Keyword.put_new(:backend, Config.fetch(:backend))
@@ -278,6 +287,8 @@ defmodule Dexterity do
   """
   @spec get_symbol_graph_snapshot(keyword()) :: {:ok, SymbolGraphSnapshot.t()} | {:error, term()}
   def get_symbol_graph_snapshot(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     snapshot_opts =
       opts
       |> Keyword.put_new(:backend, Config.fetch(:backend))
@@ -295,6 +306,8 @@ defmodule Dexterity do
   """
   @spec get_structural_snapshot(keyword()) :: {:ok, StructuralSnapshot.t()} | {:error, term()}
   def get_structural_snapshot(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     snapshot_opts =
       opts
       |> Keyword.put_new(:backend, Config.fetch(:backend))
@@ -326,6 +339,8 @@ defmodule Dexterity do
   """
   @spec find_symbols(String.t(), keyword()) :: {:ok, [ranked_symbol()]} | {:error, term()}
   def find_symbols(query, opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     with_file_graph_server(opts, fn resolved_graph_server ->
       Intelligence.find_symbols(query, Keyword.put(opts, :graph_server, resolved_graph_server))
     end)
@@ -338,6 +353,8 @@ defmodule Dexterity do
   """
   @spec match_files(String.t(), keyword()) :: {:ok, [String.t()]} | {:error, term()}
   def match_files(pattern, opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     with_file_graph_server(opts, fn resolved_graph_server ->
       Intelligence.match_files(pattern, Keyword.put(opts, :graph_server, resolved_graph_server))
     end)
@@ -351,6 +368,8 @@ defmodule Dexterity do
   @spec get_file_blast_radius(String.t(), keyword()) ::
           {:ok, non_neg_integer()} | {:error, :graph_unavailable}
   def get_file_blast_radius(file, opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     with_file_graph_server(opts, fn resolved_graph_server ->
       Intelligence.blast_radius_count(
         file,
@@ -366,6 +385,8 @@ defmodule Dexterity do
   """
   @spec get_unused_exports(keyword()) :: {:ok, [unused_export()]} | {:error, term()}
   def get_unused_exports(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     with_file_graph_server(opts, fn resolved_graph_server ->
       ExportAnalysis.unused_exports(Keyword.put(opts, :graph_server, resolved_graph_server))
     end)
@@ -378,6 +399,8 @@ defmodule Dexterity do
   """
   @spec get_test_only_exports(keyword()) :: {:ok, [map()]} | {:error, term()}
   def get_test_only_exports(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     with_file_graph_server(opts, fn resolved_graph_server ->
       ExportAnalysis.test_only_exports(Keyword.put(opts, :graph_server, resolved_graph_server))
     end)
@@ -390,6 +413,8 @@ defmodule Dexterity do
   """
   @spec get_export_analysis(keyword()) :: {:ok, [export_analysis()]} | {:error, term()}
   def get_export_analysis(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     with_file_graph_server(opts, fn resolved_graph_server ->
       ExportAnalysis.analyze_exports(Keyword.put(opts, :graph_server, resolved_graph_server))
     end)
@@ -402,6 +427,8 @@ defmodule Dexterity do
   """
   @spec get_runtime_observations(keyword()) :: {:ok, [runtime_observation()]} | {:error, term()}
   def get_runtime_observations(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     case store_conn(opts) do
       nil -> {:error, :store_unavailable}
       conn -> Store.list_runtime_observations(conn)
@@ -416,6 +443,7 @@ defmodule Dexterity do
           keyword()
         ) :: {:ok, non_neg_integer()} | {:error, term()}
   def record_runtime_observations(observations, opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
     ExportAnalysis.record_runtime_observations(observations, opts)
   end
 
@@ -425,6 +453,7 @@ defmodule Dexterity do
   @spec import_cover_modules(module() | [module()], keyword()) ::
           {:ok, non_neg_integer()} | {:error, term()}
   def import_cover_modules(modules, opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
     ExportAnalysis.import_cover_modules(modules, opts)
   end
 
@@ -434,6 +463,8 @@ defmodule Dexterity do
   @spec get_module_deps(String.t(), keyword()) ::
           {:ok, %{dependencies: [String.t()], dependents: [String.t()]}} | {:error, term()}
   def get_module_deps(file, opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+
     with_file_graph_server(opts, fn resolved_graph_server ->
       case fetch_graph(Keyword.put(opts, :graph, resolved_graph_server)) do
         {:ok, graph} ->
@@ -467,6 +498,7 @@ defmodule Dexterity do
   @spec get_symbols(String.t(), keyword()) ::
           {:ok, [map()]} | {:error, :not_indexed} | {:error, term()}
   def get_symbols(file, opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
     backend = Keyword.get(opts, :backend, Config.fetch(:backend))
     repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
 
@@ -481,10 +513,16 @@ defmodule Dexterity do
   """
   @spec notify_file_changed(String.t(), keyword()) :: :ok | {:error, term()}
   def notify_file_changed(file, opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
     backend = Keyword.get(opts, :backend, Config.fetch(:backend))
     repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
 
-    with :ok <- backend.reindex_file(file, repo_root: repo_root) do
+    reindex_opts =
+      opts
+      |> Keyword.take([:repo_root, :dexter_bin])
+      |> Keyword.put(:repo_root, repo_root)
+
+    with :ok <- backend.reindex_file(file, reindex_opts) do
       GraphServer.mark_stale(GraphServer)
       SymbolGraphServer.mark_stale(SymbolGraphServer)
       :ok
@@ -494,10 +532,11 @@ defmodule Dexterity do
   @doc """
   Returns a status snapshot for caller diagnostics.
   """
-  @spec status() :: {:ok, status_snapshot()} | {:error, term()}
-  def status do
-    backend = Config.fetch(:backend)
-    repo_root = Config.repo_root()
+  @spec status(keyword()) :: {:ok, status_snapshot()} | {:error, term()}
+  def status(opts \\ []) do
+    opts = GovernedAuthority.materialize_opts!(opts)
+    backend = Keyword.get(opts, :backend, Config.fetch(:backend))
+    repo_root = Keyword.get(opts, :repo_root, Config.repo_root())
 
     graph =
       try do
@@ -515,7 +554,8 @@ defmodule Dexterity do
             {:ok,
              %{
                backend: inspect(backend),
-               dexter_db: Path.join(repo_root, Config.fetch(:dexter_db)),
+               dexter_db:
+                 Path.join(repo_root, Keyword.get(opts, :dexter_db, Config.fetch(:dexter_db))),
                index_status: index_status,
                backend_healthy: backend_healthy,
                graph_stale: state_stale?(),

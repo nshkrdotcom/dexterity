@@ -21,17 +21,18 @@ defmodule Mix.Tasks.Dexterity.Map do
     parsed =
       OptionParser.parse!(
         argv,
-        strict: [
-          repo_root: :string,
-          backend: :string,
-          active_file: :string,
-          mentioned_file: :string,
-          edited_file: :string,
-          token_budget: :string,
-          limit: :integer,
-          include_clones: :boolean,
-          output: :string
-        ],
+        strict:
+          [
+            repo_root: :string,
+            backend: :string,
+            active_file: :string,
+            mentioned_file: :string,
+            edited_file: :string,
+            token_budget: :string,
+            limit: :integer,
+            include_clones: :boolean,
+            output: :string
+          ] ++ Helpers.governed_cli_strict_options(),
         aliases: [
           r: :repo_root,
           b: :backend,
@@ -44,7 +45,7 @@ defmodule Mix.Tasks.Dexterity.Map do
         ]
       )
 
-    opts = elem(parsed, 0)
+    opts = parsed |> elem(0) |> Helpers.materialize_cli_opts!()
     args = elem(parsed, 1)
 
     if args != [] do

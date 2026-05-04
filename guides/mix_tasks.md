@@ -8,6 +8,7 @@ Dexterity publishes its CLI commands through `mix` tasks.
 
 - `--repo-root PATH` (default config repo root)
 - `--backend MODULE` (default `Dexterity.Backend.Dexter`)
+- `--dexter-bin PATH` (default config executable)
 
 Creates a missing Dexter index with `backend.cold_index/2`, or refreshes an existing one with `backend.reindex_file/2`, then outputs `index refreshed` on success.
 
@@ -65,3 +66,24 @@ Starts the production MCP stdio transport.
 - All tasks validate positional arguments and terminate with `Mix.Error` on invalid input.
 - CLI tasks are deterministic for equivalent option sets.
 - Failures return surfaced error payloads with one user-facing summary line.
+
+## Governed flags
+
+All tasks accept the governed authority flag set:
+
+- `--governed-authority-ref`
+- `--governed-tool-ref`
+- `--governed-operation-ref`
+- `--governed-repo-ref`
+- `--governed-backend-ref`
+- `--governed-command-ref`
+- `--governed-credential-ref`
+- `--governed-repo-root`
+- `--governed-dexter-bin`
+- `--governed-dexter-db`
+- `--governed-store-path`
+- `--governed-mcp-enabled`
+
+Governed task invocation cannot be combined with direct `--repo-root`,
+`--backend`, `--dexter-bin`, command env, or tool config. Direct options remain
+available for standalone task use only.
