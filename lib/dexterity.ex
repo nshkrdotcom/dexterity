@@ -7,8 +7,8 @@ defmodule Dexterity do
   alias Dexterity.Config
   alias Dexterity.ExportAnalysis
   alias Dexterity.FileGraphSnapshot
-  alias Dexterity.GraphServer
   alias Dexterity.GovernedAuthority
+  alias Dexterity.GraphServer
   alias Dexterity.Intelligence
   alias Dexterity.Metadata
   alias Dexterity.Render
