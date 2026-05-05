@@ -10,6 +10,9 @@ Default values are provided by the library and can be overridden in `config/runt
 - `:store_path` — metadata DB path; defaults to `{:project_relative, ".dexterity/dexterity.db"}`.
 - `:dexter_bin` — executable name/path for `dexter`.
 - `:backend` — backend module implementing `Dexterity.Backend`.
+  CLI and MCP string values are bounded to `dexter`, `mock`,
+  `Dexterity.Backend.Dexter`, `Dexterity.Backend.Mock`, or an already-loaded
+  module implementing `Dexterity.Backend`.
 - `:pagerank_iterations` — rank convergence iterations (default `20`).
 - `:pagerank_damping` — damping factor (default `0.85`).
 - `:pagerank_context_boost` — context weight for `active_file`/`mentioned_file`/`edited_file`.

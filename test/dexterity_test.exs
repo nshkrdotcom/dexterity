@@ -412,11 +412,6 @@ defmodule DexterityTest do
         "dexterity-summary-store-#{:erlang.unique_integer([:positive])}.db"
       )
 
-    graph_server = Module.concat(__MODULE__, :"GraphServer#{:erlang.unique_integer([:positive])}")
-
-    summary_server =
-      Module.concat(__MODULE__, :"SummaryWorker#{:erlang.unique_integer([:positive])}")
-
     file = "lib/my_module.ex"
     module_name = "MyModule"
 
@@ -441,26 +436,28 @@ defmodule DexterityTest do
       {:ok, "Caches the repo-map summary output."}
     end
 
-    start_supervised!(
-      {GraphServer,
-       [
-         repo_root: repo_root,
-         backend: SummaryBackend,
-         store_conn: nil,
-         name: graph_server
-       ]}
-    )
+    graph_server =
+      start_supervised!(
+        {GraphServer,
+         [
+           repo_root: repo_root,
+           backend: SummaryBackend,
+           store_conn: nil,
+           name: nil
+         ]}
+      )
 
-    start_supervised!(
-      {SummaryWorker,
-       [
-         name: summary_server,
-         db_conn: conn,
-         enabled: true,
-         retry_delay_ms: 10,
-         llm_fn: llm_fn
-       ]}
-    )
+    summary_server =
+      start_supervised!(
+        {SummaryWorker,
+         [
+           name: nil,
+           db_conn: conn,
+           enabled: true,
+           retry_delay_ms: 10,
+           llm_fn: llm_fn
+         ]}
+      )
 
     Process.sleep(20)
 
@@ -554,17 +551,17 @@ defmodule DexterityTest do
 
   test "get_ranked_files boosts files that match conversation terms" do
     repo_root = runtime_repo_root()
-    graph_server = Module.concat(__MODULE__, :"RuntimeGraph#{System.unique_integer([:positive])}")
 
-    start_supervised!(
-      {GraphServer,
-       [
-         repo_root: repo_root,
-         backend: RuntimeBackend,
-         store_conn: nil,
-         name: graph_server
-       ]}
-    )
+    graph_server =
+      start_supervised!(
+        {GraphServer,
+         [
+           repo_root: repo_root,
+           backend: RuntimeBackend,
+           store_conn: nil,
+           name: nil
+         ]}
+      )
 
     Process.sleep(20)
 
@@ -594,17 +591,17 @@ defmodule DexterityTest do
 
   test "get_ranked_files can overscan before filtering to first-party prefixes" do
     repo_root = runtime_repo_root()
-    graph_server = Module.concat(__MODULE__, :"ScopedGraph#{System.unique_integer([:positive])}")
 
-    start_supervised!(
-      {GraphServer,
-       [
-         repo_root: repo_root,
-         backend: ScopedBackend,
-         store_conn: nil,
-         name: graph_server
-       ]}
-    )
+    graph_server =
+      start_supervised!(
+        {GraphServer,
+         [
+           repo_root: repo_root,
+           backend: ScopedBackend,
+           store_conn: nil,
+           name: nil
+         ]}
+      )
 
     Process.sleep(20)
 
@@ -630,17 +627,15 @@ defmodule DexterityTest do
     repo_root = runtime_repo_root()
 
     graph_server =
-      Module.concat(__MODULE__, :"ScopedExcludeGraph#{System.unique_integer([:positive])}")
-
-    start_supervised!(
-      {GraphServer,
-       [
-         repo_root: repo_root,
-         backend: ScopedBackend,
-         store_conn: nil,
-         name: graph_server
-       ]}
-    )
+      start_supervised!(
+        {GraphServer,
+         [
+           repo_root: repo_root,
+           backend: ScopedBackend,
+           store_conn: nil,
+           name: nil
+         ]}
+      )
 
     Process.sleep(20)
 
@@ -673,7 +668,6 @@ defmodule DexterityTest do
 
   test "get_repo_map shrinks auto budget for long conversations" do
     repo_root = runtime_repo_root()
-    graph_server = Module.concat(__MODULE__, :"BudgetGraph#{System.unique_integer([:positive])}")
     previous_min = Application.get_env(:dexterity, :min_token_budget)
     previous_default = Application.get_env(:dexterity, :default_token_budget)
     previous_max = Application.get_env(:dexterity, :max_token_budget)
@@ -691,15 +685,16 @@ defmodule DexterityTest do
     Application.put_env(:dexterity, :max_token_budget, 72)
     Application.put_env(:dexterity, :token_budget_saturation_tokens, 10_000)
 
-    start_supervised!(
-      {GraphServer,
-       [
-         repo_root: repo_root,
-         backend: RuntimeBackend,
-         store_conn: nil,
-         name: graph_server
-       ]}
-    )
+    graph_server =
+      start_supervised!(
+        {GraphServer,
+         [
+           repo_root: repo_root,
+           backend: RuntimeBackend,
+           store_conn: nil,
+           name: nil
+         ]}
+      )
 
     Process.sleep(20)
 
@@ -729,17 +724,15 @@ defmodule DexterityTest do
     repo_root = runtime_repo_root()
 
     graph_server =
-      Module.concat(__MODULE__, :"AnalysisGraph#{System.unique_integer([:positive])}")
-
-    start_supervised!(
-      {GraphServer,
-       [
-         repo_root: repo_root,
-         backend: RuntimeBackend,
-         store_conn: nil,
-         name: graph_server
-       ]}
-    )
+      start_supervised!(
+        {GraphServer,
+         [
+           repo_root: repo_root,
+           backend: RuntimeBackend,
+           store_conn: nil,
+           name: nil
+         ]}
+      )
 
     Process.sleep(20)
 
@@ -800,29 +793,25 @@ defmodule DexterityTest do
     repo_root = runtime_repo_root()
 
     graph_server =
-      Module.concat(__MODULE__, :"ImpactGraph#{System.unique_integer([:positive])}")
+      start_supervised!(
+        {GraphServer,
+         [
+           repo_root: repo_root,
+           backend: RuntimeBackend,
+           store_conn: nil,
+           name: nil
+         ]}
+      )
 
     symbol_graph_server =
-      Module.concat(__MODULE__, :"ImpactSymbolGraph#{System.unique_integer([:positive])}")
-
-    start_supervised!(
-      {GraphServer,
-       [
-         repo_root: repo_root,
-         backend: RuntimeBackend,
-         store_conn: nil,
-         name: graph_server
-       ]}
-    )
-
-    start_supervised!(
-      {Dexterity.SymbolGraphServer,
-       [
-         repo_root: repo_root,
-         backend: RuntimeBackend,
-         name: symbol_graph_server
-       ]}
-    )
+      start_supervised!(
+        {Dexterity.SymbolGraphServer,
+         [
+           repo_root: repo_root,
+           backend: RuntimeBackend,
+           name: nil
+         ]}
+      )
 
     Process.sleep(20)
 

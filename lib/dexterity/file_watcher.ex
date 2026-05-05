@@ -43,10 +43,7 @@ defmodule Dexterity.FileWatcher do
       Dexter ->
         if Code.ensure_loaded?(:file_system) and function_exported?(:file_system, :start_link, 1) do
           {:ok, watcher} =
-            :erlang.apply(:file_system, :start_link,
-              dirs: [state.repo_root],
-              name: :"dexterity_file_system_#{System.unique_integer([:positive])}"
-            )
+            :erlang.apply(:file_system, :start_link, dirs: [state.repo_root])
 
           :erlang.apply(:file_system, :subscribe, [watcher])
           Process.monitor(watcher)

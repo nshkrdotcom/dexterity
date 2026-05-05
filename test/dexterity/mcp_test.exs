@@ -186,6 +186,43 @@ defmodule Dexterity.MCPTest do
     assert "get_runtime_observations" in names
   end
 
+  test "tools/call rejects unknown tool ids" do
+    request = %{
+      "jsonrpc" => "2.0",
+      "id" => 22,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "unknown_tool",
+        "arguments" => %{}
+      }
+    }
+
+    assert {:ok, %{"error" => %{"message" => "method not found", "data" => data}}} =
+             Dexterity.MCP.handle_request(request, context())
+
+    assert String.contains?(data, "unknown_tool")
+  end
+
+  test "tools/call rejects unknown backend overrides without fallback" do
+    request = %{
+      "jsonrpc" => "2.0",
+      "id" => 23,
+      "method" => "tools/call",
+      "params" => %{
+        "name" => "get_symbols",
+        "arguments" => %{
+          "file" => "lib/a.ex",
+          "backend" => "Dexterity.UnknownBackend"
+        }
+      }
+    }
+
+    assert {:ok, %{"error" => %{"message" => "invalid params", "data" => data}}} =
+             Dexterity.MCP.handle_request(request, context())
+
+    assert String.contains?(data, "unknown backend")
+  end
+
   test "tools/call delegates to API and returns result payload" do
     request = %{
       "jsonrpc" => "2.0",
@@ -322,17 +359,16 @@ defmodule Dexterity.MCPTest do
   end
 
   test "tools/call get_ranked_files supports include and exclude prefixes" do
-    graph_server = Module.concat(__MODULE__, :"RankedGraph#{System.unique_integer([:positive])}")
-
-    start_supervised!(
-      {Dexterity.GraphServer,
-       [
-         repo_root: ".",
-         backend: RankedFilesBackend,
-         store_conn: nil,
-         name: graph_server
-       ]}
-    )
+    graph_server =
+      start_supervised!(
+        {Dexterity.GraphServer,
+         [
+           repo_root: ".",
+           backend: RankedFilesBackend,
+           store_conn: nil,
+           name: nil
+         ]}
+      )
 
     Process.sleep(20)
 

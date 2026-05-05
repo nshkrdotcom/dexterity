@@ -117,9 +117,6 @@ defmodule Dexterity.QueryTest do
 
     File.mkdir_p!(root)
 
-    name =
-      Module.concat(__MODULE__, :"QueryGraph#{:erlang.unique_integer([:positive])}")
-
     {:ok, pid} =
       start_supervised(
         {GraphServer,
@@ -127,21 +124,20 @@ defmodule Dexterity.QueryTest do
            repo_root: root,
            backend: BlastGraphBackend,
            store_conn: nil,
-           name: name
+           name: nil
          ]}
       )
 
     Process.sleep(20)
 
     assert {:ok, results} =
-             Query.blast_radius("lib/a.ex", graph_server: name, backend: BlastBackend, depth: 2)
+             Query.blast_radius("lib/a.ex", graph_server: pid, backend: BlastBackend, depth: 2)
 
     assert %{source: "lib/a.ex", depth: 0} in results
     assert %{source: "lib/b.ex", depth: 1} in results
     assert %{source: "lib/c.ex", depth: 2} in results
 
     on_exit(fn -> File.rm_rf!(root) end)
-    _ = pid
   end
 
   test "cochanges returns git-derived neighbors from the metadata store" do

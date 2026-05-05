@@ -73,6 +73,23 @@ defmodule Dexterity.GovernedAuthorityTest do
     end
   end
 
+  test "unknown governed refs fail closed", %{repo_root: repo_root} do
+    assert {:error, {:unknown_governed_ref, :tool_ref, "dexterity.unknown"}} =
+             GovernedAuthority.materialize_opts(
+               governed_authority: %{authority(repo_root) | tool_ref: "dexterity.unknown"}
+             )
+
+    assert {:error, {:unknown_governed_ref, :operation_ref, "unknown_operation"}} =
+             GovernedAuthority.materialize_opts(
+               governed_authority: %{authority(repo_root) | operation_ref: "unknown_operation"}
+             )
+
+    assert {:error, {:unknown_governed_backend_ref, "unknown_backend"}} =
+             GovernedAuthority.materialize_opts(
+               governed_authority: %{authority(repo_root) | backend_ref: "unknown_backend"}
+             )
+  end
+
   test "public API rejects direct routing beside governed authority", %{repo_root: repo_root} do
     error =
       assert_raise ArgumentError, fn ->

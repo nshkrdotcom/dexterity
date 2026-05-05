@@ -29,9 +29,12 @@ defmodule Dexterity.SourcePolicyTest do
       |> Enum.flat_map(fn path ->
         body = File.read!(path)
 
-        forbidden_tokens()
-        |> Enum.filter(&String.contains?(body, &1))
-        |> Enum.map(&{path, &1})
+        token_hits =
+          forbidden_tokens()
+          |> Enum.filter(&String.contains?(body, &1))
+          |> Enum.map(&{path, &1})
+
+        token_hits ++ dynamic_quoted_atom_hits(path, body)
       end)
 
     assert hits == []
@@ -67,6 +70,7 @@ defmodule Dexterity.SourcePolicyTest do
       "binary_to_" <> "existing_atom",
       "list_to_" <> "atom",
       "list_to_" <> "existing_atom",
+      "Module." <> "concat",
       ":" <> "#" <> "{",
       "Re" <> "gex",
       "re" <> "gex",
@@ -86,5 +90,21 @@ defmodule Dexterity.SourcePolicyTest do
       "from " <> "re" <> " import",
       "import " <> "re"
     ]
+  end
+
+  defp dynamic_quoted_atom_hits(path, body) do
+    atom_prefix = <<58, 34>>
+    interpolation = "#" <> "{"
+
+    body
+    |> String.split(atom_prefix)
+    |> Enum.drop(1)
+    |> Enum.filter(fn suffix ->
+      suffix
+      |> String.split("\"", parts: 2)
+      |> List.first()
+      |> String.contains?(interpolation)
+    end)
+    |> Enum.map(fn _suffix -> {path, "dynamic quoted atom interpolation"} end)
   end
 end

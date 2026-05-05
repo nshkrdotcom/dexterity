@@ -42,7 +42,6 @@ defmodule Dexterity.CochangeWorkerTest do
   end
 
   test "analyzes git output and upserts normalized cochange edges", %{conn: conn, cmd: cmd} do
-    name = Module.concat(__MODULE__, :"CochangeWorker#{:erlang.unique_integer([:positive])}")
     root = System.tmp_dir!()
 
     {:ok, pid} =
@@ -53,7 +52,7 @@ defmodule Dexterity.CochangeWorkerTest do
          cmd_fn: cmd,
          enabled: true,
          interval_ms: 10_000,
-         name: name}
+         name: nil}
       )
 
     send(pid, :analyze)

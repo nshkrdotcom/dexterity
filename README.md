@@ -122,6 +122,11 @@ When governed authority is present, direct `--repo-root`, `--backend`,
 `--dexter-bin`, command env, and tool config values are rejected instead of
 being treated as authority.
 
+Backend strings accepted through CLI and MCP routing are bounded. The built-in
+refs are `dexter`, `mock`, `Dexterity.Backend.Dexter`, and
+`Dexterity.Backend.Mock`; custom backend modules must already be loaded in the
+VM and implement `Dexterity.Backend`.
+
 Build or refresh the Dexter index for the repo:
 
 ```bash

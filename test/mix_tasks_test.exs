@@ -247,6 +247,30 @@ defmodule MixTasksTest do
              Dexterity.Backend.Dexter
   end
 
+  test "task helpers reject unknown backend module names without fallback" do
+    error =
+      assert_raise ArgumentError, fn ->
+        TaskHelpers.parse_backend(backend: "Dexterity.UnknownBackend")
+      end
+
+    assert String.contains?(error.message, "unknown backend")
+  end
+
+  test "dexterity.query rejects unknown commands", %{repo_root: repo_root} do
+    error =
+      assert_raise Mix.Error, fn ->
+        Query.run([
+          "unknown_command",
+          "--repo-root",
+          repo_root,
+          "--backend",
+          inspect(TaskBackend)
+        ])
+      end
+
+    assert error.message == "unknown query command"
+  end
+
   test "dexterity.index loads the configured backend and builds a real index" do
     dexter_bin = System.find_executable("dexter")
     repo_root = create_real_repo!()

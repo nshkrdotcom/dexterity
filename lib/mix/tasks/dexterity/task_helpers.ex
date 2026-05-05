@@ -2,6 +2,7 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
   @moduledoc false
 
   alias Dexterity.ApplicationControl
+  alias Dexterity.BackendResolver
   alias Dexterity.Config
   alias Dexterity.GovernedAuthority
 
@@ -33,7 +34,7 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
   @spec parse_backend(keyword()) :: module()
   def parse_backend(opts) do
     backend = Keyword.get(opts, @task_backend_key, Config.fetch(:backend))
-    normalize_module!(backend)
+    BackendResolver.resolve!(backend)
   end
 
   @spec parse_repo_root(keyword()) :: String.t()
@@ -159,41 +160,6 @@ defmodule Mix.Tasks.Dexterity.TaskHelpers do
   def print_value(value) do
     Mix.shell().info(inspect(value, pretty: true, width: 80, limit: :infinity))
     :ok
-  end
-
-  @spec normalize_module!(module() | String.t()) :: module()
-  defp normalize_module!(module) when is_atom(module), do: ensure_backend_behaviour!(module)
-
-  defp normalize_module!(value) when is_binary(value) do
-    module = Module.concat([value])
-    ensure_backend_behaviour!(module)
-  end
-
-  defp normalize_module!(value) do
-    raise ArgumentError, "invalid backend value: #{inspect(value)}"
-  end
-
-  @spec ensure_backend_behaviour!(module()) :: module()
-  defp ensure_backend_behaviour!(module) when is_atom(module) do
-    unless Code.ensure_loaded?(module) do
-      raise ArgumentError,
-            "module #{inspect(module)} does not satisfy Dexterity.Backend contract"
-    end
-
-    optional_callbacks =
-      Dexterity.Backend.behaviour_info(:optional_callbacks)
-      |> MapSet.new()
-
-    Dexterity.Backend.behaviour_info(:callbacks)
-    |> Enum.reject(&MapSet.member?(optional_callbacks, &1))
-    |> Enum.each(fn {func, arity} ->
-      unless function_exported?(module, func, arity) do
-        raise ArgumentError,
-              "module #{inspect(module)} does not implement #{func}/#{arity}"
-      end
-    end)
-
-    module
   end
 
   defp wait_for_stop(attempts \\ 50)

@@ -124,6 +124,11 @@ Authoritative public API behavior for Dexterity.
 - `mix dexterity.query blast_count|symbols|files|file_graph|symbol_graph|structural_snapshot|runtime_observations|ranked_symbols|impact_context|export_analysis|unused_exports|test_only_exports [args]`
 - `mix dexterity.mcp.serve --repo-root PATH` (production transport)
 
+`--backend MODULE` is resolved without creating modules from input strings.
+Use `dexter`, `mock`, `Dexterity.Backend.Dexter`,
+`Dexterity.Backend.Mock`, or an already-loaded module implementing
+`Dexterity.Backend`.
+
 ## Error and stability contract
 
 - Explicit error tuples are preferred over silent fallback.

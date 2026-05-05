@@ -145,8 +145,6 @@ defmodule Dexterity.GraphServerTest do
   end
 
   setup do
-    name = Module.concat(__MODULE__, :"GraphServer#{:erlang.unique_integer([:positive])}")
-
     repo_root =
       Path.join(
         System.tmp_dir!(),
@@ -162,7 +160,7 @@ defmodule Dexterity.GraphServerTest do
            repo_root: repo_root,
            backend: FakeBackend,
            store_conn: nil,
-           name: name
+           name: nil
          ]}
       )
 
@@ -170,7 +168,7 @@ defmodule Dexterity.GraphServerTest do
 
     on_exit(fn -> File.rm_rf!(repo_root) end)
 
-    %{server: name, pid: pid}
+    %{server: pid, pid: pid}
   end
 
   test "builds adjacency and ranking from backend edges", %{server: server} do
@@ -194,37 +192,34 @@ defmodule Dexterity.GraphServerTest do
   end
 
   test "supports longer call timeouts for slow graph builds" do
-    name = Module.concat(__MODULE__, :"SlowGraph#{System.unique_integer([:positive])}")
-
     repo_root =
       Path.join(System.tmp_dir!(), "dexterity-slow-graph-#{System.unique_integer([:positive])}")
 
     File.mkdir_p!(repo_root)
 
-    start_supervised!(
-      Supervisor.child_spec(
-        {GraphServer,
-         [
-           repo_root: repo_root,
-           backend: SlowBackend,
-           store_conn: nil,
-           name: name
-         ]},
-        id: name
+    server =
+      start_supervised!(
+        Supervisor.child_spec(
+          {GraphServer,
+           [
+             repo_root: repo_root,
+             backend: SlowBackend,
+             store_conn: nil,
+             name: nil
+           ]},
+          id: {GraphServer, :slow_graph}
+        )
       )
-    )
 
     on_exit(fn -> File.rm_rf!(repo_root) end)
 
-    assert catch_exit(GraphServer.get_metadata(name, timeout: 10))
+    assert catch_exit(GraphServer.get_metadata(server, timeout: 10))
 
     assert %{"lib/a.ex" => _metadata, "lib/b.ex" => _metadata2} =
-             GraphServer.get_metadata(name, timeout: 500)
+             GraphServer.get_metadata(server, timeout: 500)
   end
 
   test "adds use, behaviour, and sibling implementation edges from source metadata" do
-    name = Module.concat(__MODULE__, :"MetadataGraph#{:erlang.unique_integer([:positive])}")
-
     repo_root =
       Path.join(
         System.tmp_dir!(),
@@ -279,22 +274,23 @@ defmodule Dexterity.GraphServerTest do
       """
     )
 
-    start_supervised!(
-      Supervisor.child_spec(
-        {GraphServer,
-         [
-           repo_root: repo_root,
-           backend: MetadataBackend,
-           store_conn: nil,
-           name: name
-         ]},
-        id: name
+    server =
+      start_supervised!(
+        Supervisor.child_spec(
+          {GraphServer,
+           [
+             repo_root: repo_root,
+             backend: MetadataBackend,
+             store_conn: nil,
+             name: nil
+           ]},
+          id: {GraphServer, :metadata_graph}
+        )
       )
-    )
 
     Process.sleep(20)
 
-    adjacency = GraphServer.get_adjacency(name)
+    adjacency = GraphServer.get_adjacency(server)
 
     assert adjacency["test/example_test.exs"]["lib/support/data_case.ex"] == 3.0
     assert adjacency["lib/notifications/email.ex"]["lib/notifications.ex"] == 2.0
@@ -317,28 +313,27 @@ defmodule Dexterity.GraphServerTest do
         "dexterity-cochange-graph-#{:erlang.unique_integer([:positive])}.db"
       )
 
-    name = Module.concat(__MODULE__, :"CochangeGraph#{:erlang.unique_integer([:positive])}")
-
     File.mkdir_p!(repo_root)
     {:ok, conn} = Store.open(store_path)
     assert :ok = Store.upsert_cochange(conn, "lib/a.ex", "lib/b.ex", 4, 2.2, 1_000)
 
-    start_supervised!(
-      Supervisor.child_spec(
-        {GraphServer,
-         [
-           repo_root: repo_root,
-           backend: CochangeOnlyBackend,
-           store_conn: conn,
-           name: name
-         ]},
-        id: name
+    server =
+      start_supervised!(
+        Supervisor.child_spec(
+          {GraphServer,
+           [
+             repo_root: repo_root,
+             backend: CochangeOnlyBackend,
+             store_conn: conn,
+             name: nil
+           ]},
+          id: {GraphServer, :cochange_graph}
+        )
       )
-    )
 
     Process.sleep(20)
 
-    adjacency = GraphServer.get_adjacency(name)
+    adjacency = GraphServer.get_adjacency(server)
 
     assert adjacency["lib/a.ex"]["lib/b.ex"] == 2.2
     assert adjacency["lib/b.ex"]["lib/a.ex"] == 2.2

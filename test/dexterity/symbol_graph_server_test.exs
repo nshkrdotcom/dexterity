@@ -147,27 +147,26 @@ defmodule Dexterity.SymbolGraphServerTest do
   end
 
   setup do
-    name = Module.concat(__MODULE__, :"SymbolGraph#{System.unique_integer([:positive])}")
-
     repo_root =
       Path.join(System.tmp_dir!(), "dexterity-symbol-graph-#{System.unique_integer([:positive])}")
 
     File.mkdir_p!(repo_root)
 
-    start_supervised!(
-      {SymbolGraphServer,
-       [
-         repo_root: repo_root,
-         backend: SymbolBackend,
-         name: name
-       ]}
-    )
+    server =
+      start_supervised!(
+        {SymbolGraphServer,
+         [
+           repo_root: repo_root,
+           backend: SymbolBackend,
+           name: nil
+         ]}
+      )
 
     Process.sleep(20)
 
     on_exit(fn -> File.rm_rf(repo_root) end)
 
-    %{server: name}
+    %{server: server}
   end
 
   test "builds symbol adjacency and ranks by symbol context", %{server: server} do
@@ -217,29 +216,28 @@ defmodule Dexterity.SymbolGraphServerTest do
   end
 
   test "supports longer call timeouts for slow symbol graph builds" do
-    name = Module.concat(__MODULE__, :"SlowSymbolGraph#{System.unique_integer([:positive])}")
-
     repo_root =
       Path.join(System.tmp_dir!(), "dexterity-slow-symbol-#{System.unique_integer([:positive])}")
 
     File.mkdir_p!(repo_root)
 
-    start_supervised!(
-      Supervisor.child_spec(
-        {SymbolGraphServer,
-         [
-           repo_root: repo_root,
-           backend: SlowSymbolBackend,
-           name: name
-         ]},
-        id: name
+    server =
+      start_supervised!(
+        Supervisor.child_spec(
+          {SymbolGraphServer,
+           [
+             repo_root: repo_root,
+             backend: SlowSymbolBackend,
+             name: nil
+           ]},
+          id: {SymbolGraphServer, :slow_symbol_graph}
+        )
       )
-    )
 
     on_exit(fn -> File.rm_rf!(repo_root) end)
 
-    assert catch_exit(SymbolGraphServer.get_nodes(name, timeout: 10))
-    assert nodes = SymbolGraphServer.get_nodes(name, timeout: 500)
+    assert catch_exit(SymbolGraphServer.get_nodes(server, timeout: 10))
+    assert nodes = SymbolGraphServer.get_nodes(server, timeout: 500)
     assert Enum.any?(nodes, fn {_id, symbol} -> symbol.module == "A" end)
   end
 end

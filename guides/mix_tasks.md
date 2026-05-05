@@ -7,7 +7,9 @@ Dexterity publishes its CLI commands through `mix` tasks.
 ### `mix dexterity.index`
 
 - `--repo-root PATH` (default config repo root)
-- `--backend MODULE` (default `Dexterity.Backend.Dexter`)
+- `--backend MODULE` (default `Dexterity.Backend.Dexter`; accepts the built-in
+  refs `dexter`, `mock`, `Dexterity.Backend.Dexter`,
+  `Dexterity.Backend.Mock`, or an already-loaded backend module)
 - `--dexter-bin PATH` (default config executable)
 
 Creates a missing Dexter index with `backend.cold_index/2`, or refreshes an existing one with `backend.reindex_file/2`, then outputs `index refreshed` on success.

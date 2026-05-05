@@ -195,17 +195,15 @@ defmodule Dexterity.ExportReachabilityTest do
     {:ok, store_conn} = Store.open(store_path)
 
     graph_server =
-      Module.concat(__MODULE__, :"GraphServer#{System.unique_integer([:positive])}")
-
-    start_supervised!(
-      {GraphServer,
-       [
-         repo_root: repo_root,
-         backend: ReachabilityBackend,
-         store_conn: nil,
-         name: graph_server
-       ]}
-    )
+      start_supervised!(
+        {GraphServer,
+         [
+           repo_root: repo_root,
+           backend: ReachabilityBackend,
+           store_conn: nil,
+           name: nil
+         ]}
+      )
 
     Process.sleep(20)
 

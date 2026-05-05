@@ -38,9 +38,6 @@ defmodule Dexterity.GraphTest do
 
     File.mkdir_p!(root)
 
-    name =
-      Module.concat(__MODULE__, :"GraphServer#{:erlang.unique_integer([:positive])}")
-
     {:ok, pid} =
       start_supervised(
         {GraphServer,
@@ -48,7 +45,7 @@ defmodule Dexterity.GraphTest do
            repo_root: root,
            backend: GraphTestBackend,
            store_conn: nil,
-           name: name
+           name: nil
          ]}
       )
 
@@ -56,11 +53,11 @@ defmodule Dexterity.GraphTest do
       File.rm_rf!(root)
     end)
 
-    %{name: name, pid: pid}
+    %{server: pid, pid: pid}
   end
 
-  test "get_adjacency returns tagged result", %{name: name} do
-    assert {:ok, adjacency} = Graph.get_adjacency(server: name)
+  test "get_adjacency returns tagged result", %{server: server} do
+    assert {:ok, adjacency} = Graph.get_adjacency(server: server)
     assert adjacency["lib/a.ex"]["lib/b.ex"] == 1.0
     assert adjacency["lib/b.ex"]["lib/c.ex"] == 1.0
   end

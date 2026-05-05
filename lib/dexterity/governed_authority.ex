@@ -1,6 +1,8 @@
 defmodule Dexterity.GovernedAuthority do
   @moduledoc false
 
+  alias Dexterity.BackendResolver
+
   @direct_fields [
     :repo_root,
     :backend,
@@ -22,11 +24,6 @@ defmodule Dexterity.GovernedAuthority do
     :command_ref,
     :credential_ref
   ]
-
-  @backend_refs %{
-    "dexter" => Dexterity.Backend.Dexter,
-    "mock" => Dexterity.Backend.Mock
-  }
 
   @tool_refs ["dexterity.api", "dexterity.cli", "dexterity.mcp"]
 
@@ -247,7 +244,7 @@ defmodule Dexterity.GovernedAuthority do
   defp backend_for(authority) do
     ref = fetch(authority, :backend_ref)
 
-    case Map.fetch(@backend_refs, ref) do
+    case BackendResolver.fetch_builtin_ref(ref) do
       {:ok, backend} -> {:ok, backend}
       :error -> {:error, {:unknown_governed_backend_ref, ref}}
     end
